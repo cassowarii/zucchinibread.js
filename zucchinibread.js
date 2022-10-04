@@ -151,7 +151,7 @@ function create_game(params) {
 
     game_props.background_color = params.background_color || '#000000';
 
-    let canvas = document.getElementById('canvas');
+    let canvas = document.getElementById(game_props.canvas);
 
     let global_ctx = canvas.getContext('2d');
     global_ctx.imageSmoothingEnabled = false;
@@ -180,6 +180,8 @@ function create_game(params) {
         /* General properties */
         ...game_props,
 
+        canvas: canvas,
+
         /* Loading */
         ready_to_go: false,
         _total_things_to_load: 1,
@@ -202,6 +204,9 @@ function create_game(params) {
         playing: false,
         play: function() {
             this.playing = true;
+            if (this.events.gamestart) {
+                this.events.gamestart(this);
+            }
             _loop(this);
         },
 
@@ -238,6 +243,29 @@ function create_game(params) {
         }
     };
 
+    /* Register event listeners */
+    canvas.onmousedown = function(e) {
+        _handle_mousedown(game, e);
+    }
+
+    canvas.onmousemove = function(e) {
+        _handle_mousemove(game, e);
+    }
+
+    canvas.onmouseup = function(e) {
+        _handle_mouseup(game, e);
+    }
+
+    for (let ev in params.events) {
+        /* Register any other events I guess */
+        if (ev === 'mouseup' || ev === 'mousedown' || ev === 'mousemove') continue;
+
+        canvas['on' + ev] = function(e) {
+            params.events[ev](game, e);
+        }
+    }
+
+    /* Set loading stuff */
     let loading_img = new Image();
     loading_img.onload = _register_resource('loading.png', game, function() {
         if (!game.ready_to_go) {
@@ -309,6 +337,48 @@ function _update(game, delta) {
         if (game.transition.timer > game.transition.end_time) {
             _finish_transition(game);
         }
+    }
+}
+
+/* ---- Mouse ---- */
+
+function _handle_mousedown(game, e) {
+    if (!game.playing) return;
+
+    if (game.transition.is_transitioning) return;
+
+    const rect = game.canvas.getBoundingClientRect();
+    let x = Math.floor((e.clientX - rect.left) / game.draw_scale);
+    let y = Math.floor((e.clientY - rect.top) / game.draw_scale);
+    if (e.button === 0 && game.events.mousedown) {
+        game.events.mousedown(game, x, y);
+    }
+}
+
+function _handle_mouseup(game, e) {
+    if (!game.playing && game.ready_to_go) {
+        /* Click to start */
+        console.log("clicktostart");
+        game.play();
+        return;
+    }
+
+    if (game.transition.is_transitioning) return;
+
+    const rect = game.canvas.getBoundingClientRect();
+    let x = Math.floor((e.clientX - rect.left) / game.draw_scale);
+    let y = Math.floor((e.clientY - rect.top) / game.draw_scale);
+    if (e.button === 0 && game.events.mouseup) {
+        game.events.mouseup(game, x, y);
+    }
+}
+
+function _handle_mousemove(game, e) {
+    const rect = game.canvas.getBoundingClientRect();
+    let x = Math.floor((e.clientX - rect.left) / game.draw_scale);
+    let y = Math.floor((e.clientY - rect.top) / game.draw_scale);
+    if (game.events.mousemove) {
+        game.events.mousemove(game, x, y);
     }
 }
 
