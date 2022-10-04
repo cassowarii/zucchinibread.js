@@ -15,12 +15,13 @@ let game;
 
 ready(function() {
     game = create_game({
-        canvas_w: 640,  /* Width of your drawing canvas */
-        canvas_h: 480,  /* Height of your drawing canvas */
-        draw_scale: 4,  /* How much the pixels should be scaled up. */
-        tile_size: 8,   /* How big each 'tile' in your game is. (For now this info is just for you mostly.) */
-        level_w: 20,    /* Dimensions of your game levels. (Likewise mostly) */
-        level_h: 14,
+        canvas: 'mycanvas',          /* ID of your canvas element */
+        canvas_w: 640,               /* Width of your drawing canvas */
+        canvas_h: 480,               /* Height of your drawing canvas */
+        draw_scale: 4,               /* How much the pixels should be scaled up. */
+        tile_size: 8,                /* How big each 'tile' in your game is. (For now this info is just for you mostly.) */
+        level_w: 20,                 /* Width of your game levels. (Likewise mostly) */
+        level_h: 14,                 /* Height of your game levels. */
         background_color: '#000000', /* Background color that will be drawn underneath everything you draw */
         draw_func: do_draw,          /* Function that will be called in the game loop to render the game */
         update_func: do_update,      /* Function that will be called to update the game state - 1 parameter, time delta of update in ms */
