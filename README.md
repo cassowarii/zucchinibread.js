@@ -31,6 +31,8 @@ ready(function() {
     /* CALL THE OTHER REGISTER FUNCTIONS (EXPLAINED BELOW) HERE IF YOU HAVE THEM */
 
     game.resources_ready();
+
+    /* Do any other initialization you need to here. */
 });
 ```
 
