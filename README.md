@@ -19,13 +19,22 @@ ready(function() {
         canvas_w: 640,               /* Width of your drawing canvas */
         canvas_h: 480,               /* Height of your drawing canvas */
         draw_scale: 4,               /* How much the pixels should be scaled up. */
-        tile_size: 8,                /* How big each 'tile' in your game is. (For now this info is just for you mostly.) */
-        level_w: 20,                 /* Width of your game levels. (Likewise mostly) */
-        level_h: 14,                 /* Height of your game levels. */
         background_color: '#000000', /* Background color that will be drawn underneath everything you draw */
         draw_func: do_draw,          /* Function that will be called in the game loop to render the game */
         update_func: do_update,      /* Function that will be called to update the game state - 1 parameter, time delta of update in ms */
-        frame_rate: 60,              /* Frame rate the game will run at */
+
+        events: {
+            mouseup: mouseup_func,
+            keydown: keydown_func,
+            /* etc. */
+        },                          /* Callbacks for events. Receive the game object as 1st parameter, event 2nd. */
+
+        /* Optional parameters you can add: */
+        tile_size: 8,                /* How big each 'tile' in your game is. (optional, mostly just for you) */
+        level_w: 20,                 /* Width of your game levels. (optional, mostly just for you) */
+        level_h: 14,                 /* Height of your game levels. (same) */
+        frame_rate: 60,              /* Frame rate the game will run at - optional, default 60 */
+        run_in_background: true,     /* disable auto-pausing when clicking away from game (optional, default false) */
     });
 
     /* CALL THE OTHER REGISTER FUNCTIONS (EXPLAINED BELOW) HERE IF YOU HAVE THEM */
@@ -38,21 +47,7 @@ ready(function() {
 
 Make sure you call `resources_ready()` after you register all your resources, or the game will never finish loading. It's like a safety feature, to let the game know you're done telling it to load new stuff.
 
-Also, make sure to provide an image `loading.png` and an image `clicktostart.png` which will be displayed when the game is loading and when it has finished loading and should be, uh, clicked to start.
-
-You should then declare some kind of mousedown/mouseup event like so:
-
-```
-document.onmousedown = function() {
-    if (game.ready_to_go) {
-        game.play();
-    }
-}
-```
-
-This will let the user click to start the game, at which point the update/draw game loop will start running!
-
-(I'll probably automate this bit when I add keyboard/mouse support to the engine. Right now you've just got to handle it yourself, sorry)
+Also, make sure to provide three images in the root folder: `loading.png`, `clicktostart.png`, and `pause.png`, which will be drawn over the full screen (a) when the game is loading; (b) when it has finished loading and should be clicked to start; (c) when you click out of the game and it pauses. (`pause.png` is optional if `run_in_background` is enabled)
 
 ### resource loading
 
