@@ -209,6 +209,7 @@ function create_game(params) {
             }
             _loop(this);
         },
+        _norun: false,
 
         /* Audio */
         sfx: {},
@@ -245,15 +246,47 @@ function create_game(params) {
 
     /* Register event listeners */
     canvas.onmousedown = function(e) {
-        _handle_mousedown(game, e);
+        if (!game._norun) {
+            _handle_mousedown(game, e);
+        }
     }
 
     canvas.onmousemove = function(e) {
-        _handle_mousemove(game, e);
+        if (!game._norun) {
+            _handle_mousemove(game, e);
+        }
     }
 
     canvas.onmouseup = function(e) {
-        _handle_mouseup(game, e);
+        if (!game._norun) {
+            _handle_mouseup(game, e);
+        }
+    }
+
+    canvas.onblur = function(e) {
+        if (game.playing && !game.run_in_background) {
+            game._norun = true;
+            for (let m in game.music) {
+                if (!game.music[m].paused) {
+                    game.music[m].was_playing = true;
+                    game.music[m].pause();
+                } else {
+                    game.music[m].was_playing = false;
+                }
+            }
+        }
+    }
+
+    canvas.onfocus = function(e) {
+        if (game.playing && !game.run_in_background) {
+            game._norun = false;
+            for (let m in game.music) {
+                if (game.music[m].was_playing) {
+                    game.music[m].play();
+                }
+            }
+            _loop(game);
+        }
     }
 
     for (let ev in params.events) {
@@ -261,7 +294,9 @@ function create_game(params) {
         if (ev === 'mouseup' || ev === 'mousedown' || ev === 'mousemove') continue;
 
         canvas['on' + ev] = function(e) {
-            params.events[ev](game, e);
+            if (game.playing && !game._norun) {
+                params.events[ev](game, e);
+            }
         }
     }
 
@@ -289,6 +324,13 @@ function create_game(params) {
     clicktostart_img.src = 'clicktostart.png';
     game.img._clicktostart = clicktostart_img;
 
+    if (!game.run_in_background) {
+        let pause_img = new Image();
+        pause_img.onload = _register_resource('pause.png', game);
+        pause_img.src = 'pause.png';
+        game.img._pause = pause_img;
+    }
+
     return game;
 }
 
@@ -305,7 +347,6 @@ window.requestAnimFrame = (function() {
         };
 })();
 
-let _keep_going = true;
 let _last_frame_time;
 let _timedelta = 0;
 function _loop(game, timestamp) {
@@ -322,7 +363,7 @@ function _loop(game, timestamp) {
     }
     _draw(game);
 
-    if (_keep_going) {
+    if (!game._norun) {
         requestAnimFrame(function(timestamp) {
             _loop(game, timestamp);
         });
@@ -351,7 +392,7 @@ function _handle_mousedown(game, e) {
     let x = Math.floor((e.clientX - rect.left) / game.draw_scale);
     let y = Math.floor((e.clientY - rect.top) / game.draw_scale);
     if (e.button === 0 && game.events.mousedown) {
-        game.events.mousedown(game, x, y);
+        game.events.mousedown(game, e, x, y);
     }
 }
 
@@ -369,7 +410,7 @@ function _handle_mouseup(game, e) {
     let x = Math.floor((e.clientX - rect.left) / game.draw_scale);
     let y = Math.floor((e.clientY - rect.top) / game.draw_scale);
     if (e.button === 0 && game.events.mouseup) {
-        game.events.mouseup(game, x, y);
+        game.events.mouseup(game, e, x, y);
     }
 }
 
@@ -378,7 +419,7 @@ function _handle_mousemove(game, e) {
     let x = Math.floor((e.clientX - rect.left) / game.draw_scale);
     let y = Math.floor((e.clientY - rect.top) / game.draw_scale);
     if (game.events.mousemove) {
-        game.events.mousemove(game, x, y);
+        game.events.mousemove(game, e, x, y);
     }
 }
 
@@ -417,6 +458,10 @@ function _draw(game) {
 
     if (game.transition.is_transitioning) {
         _draw_transition(game);
+    }
+
+    if (game._norun) {
+        game.ctx.global.drawImage(game.img._pause, 0, 0);
     }
 
     game.ctx.global.restore();
