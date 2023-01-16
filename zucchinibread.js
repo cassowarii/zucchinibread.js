@@ -1,6 +1,7 @@
 "use strict";
 
-/* Please forgive my strictly procedural style here */
+/* Please forgive my strictly procedural style here.
+ * Been writing too much C lately... */
 
 /* ---- Util ---- */
 
@@ -84,7 +85,9 @@ function _register_sfx(sfxdata, game) {
 function _register_music(musicdata, game) {
     for (let key in musicdata) {
         let musicpath;
-        if (_audiocheck.canPlayType('audio/mpeg')) {
+        if (musicdata[key].path.match(/\.[a-z]{3}$/)) {
+            musicpath = musicdata[key].path;
+        } else if (_audiocheck.canPlayType('audio/mpeg')) {
             musicpath = musicdata[key].path + '.mp3';
         } else if (_audiocheck.canPlayType('audio/ogg')) {
             musicpath = musicdata[key].path + '.ogg';
@@ -103,6 +106,26 @@ function _register_music(musicdata, game) {
         }
         music.addEventListener('canplaythrough', _register_resource(musicpath, game), false);
         music.addEventListener('error', _sound_resource_error(musicpath, game, music), false);
+
+        /* Handle music changes when muted, so when we unmute,
+         * the correct music will be playing. */
+        music._og_play = music.play;
+        music.play = function() {
+            if (game.muted) {
+                music.was_playing = true;
+            } else {
+                music._og_play();
+            }
+        }
+
+        music._og_pause = music.pause;
+        music.pause = function() {
+            if (game.muted) {
+                music.was_playing = false;
+            } else {
+                music._og_pause();
+            }
+        }
 
         game.music[key] = music;
     }
@@ -159,18 +182,24 @@ function create_game(params) {
     global_ctx.mozImageSmoothingEnabled = false;
 
     let mask_canvas = document.createElement('canvas');
+    mask_canvas.width = canvas.width;
+    mask_canvas.height = canvas.height;
     let mask_ctx = mask_canvas.getContext('2d');
     mask_ctx.imageSmoothingEnabled = false;
     mask_ctx.webkitImageSmoothingEnabled = false;
     mask_ctx.mozImageSmoothingEnabled = false;
 
     let copy_canvas = document.createElement('canvas');
+    copy_canvas.width = canvas.width;
+    copy_canvas.height = canvas.height;
     let copy_ctx = copy_canvas.getContext('2d');
     copy_ctx.imageSmoothingEnabled = false;
     copy_ctx.webkitImageSmoothingEnabled = false;
     copy_ctx.mozImageSmoothingEnabled = false;
 
     let draw_canvas = document.createElement('canvas');
+    draw_canvas.width = canvas.width;
+    draw_canvas.height = canvas.height;
     let draw_ctx = draw_canvas.getContext('2d');
     draw_ctx.imageSmoothingEnabled = false;
     draw_ctx.webkitImageSmoothingEnabled = false;
@@ -215,6 +244,19 @@ function create_game(params) {
         sfx: {},
         music: {},
         muted: false,
+        mute: function() {
+            _mute(this);
+        },
+        unmute: function() {
+            _unmute(this);
+        },
+        toggle_mute: function() {
+            if (this.muted) {
+                _unmute(this);
+            } else {
+                _mute(this);
+            }
+        },
         register_sfx: function(sfxdata) {
             _register_sfx(sfxdata, this);
         },
@@ -245,6 +287,16 @@ function create_game(params) {
     };
 
     /* Register event listeners */
+    for (let ev in params.events) {
+        /* Register any other events I guess */
+        canvas['on' + ev] = function(e) {
+            if (game.playing && !game._norun) {
+                params.events[ev](game, e);
+            }
+        }
+    }
+
+    /* Override with special events */
     canvas.onmousedown = function(e) {
         if (!game._norun) {
             _handle_mousedown(game, e);
@@ -263,40 +315,35 @@ function create_game(params) {
         }
     }
 
+    canvas.onkeydown = function(e) {
+        if (!game._norun && game.events.keydown) {
+            console.log("E");
+            game.events.keydown(game, e);
+            e.preventDefault();
+        }
+    }
+
+    canvas.onkeyup = function(e) {
+        if (!game._norun && game.events.keyup) {
+            game.events.keyup(game, e);
+            e.preventDefault();
+        }
+    }
+
     canvas.onblur = function(e) {
         if (game.playing && !game.run_in_background) {
             game._norun = true;
-            for (let m in game.music) {
-                if (!game.music[m].paused) {
-                    game.music[m].was_playing = true;
-                    game.music[m].pause();
-                } else {
-                    game.music[m].was_playing = false;
-                }
-            }
+            _stop_music(game);
         }
     }
 
     canvas.onfocus = function(e) {
         if (game.playing && !game.run_in_background) {
             game._norun = false;
-            for (let m in game.music) {
-                if (game.music[m].was_playing) {
-                    game.music[m].play();
-                }
+            if (!game.muted) {
+                _start_music(game);
             }
             _loop(game);
-        }
-    }
-
-    for (let ev in params.events) {
-        /* Register any other events I guess */
-        if (ev === 'mouseup' || ev === 'mousedown' || ev === 'mousemove') continue;
-
-        canvas['on' + ev] = function(e) {
-            if (game.playing && !game._norun) {
-                params.events[ev](game, e);
-            }
         }
     }
 
@@ -305,7 +352,7 @@ function create_game(params) {
     loading_img.onload = _register_resource('loading.png', game, function() {
         if (!game.ready_to_go) {
             game.ctx.global.save();
-            game.ctx.global.scale(draw_scale, draw_scale);
+            game.ctx.global.scale(game.draw_scale, game.draw_scale);
             game.ctx.global.drawImage(loading_img, 0, 0);
             game.ctx.global.restore();
         }
@@ -316,7 +363,7 @@ function create_game(params) {
     clicktostart_img.onload = _register_resource('clicktostart.png', game, function() {
         if (game.ready_to_go) {
             game.ctx.global.save();
-            game.ctx.global.scale(draw_scale, draw_scale);
+            game.ctx.global.scale(game.draw_scale, game.draw_scale);
             game.ctx.global.drawImage(game.img._clicktostart, 0, 0);
             game.ctx.global.restore();
         }
@@ -332,6 +379,41 @@ function create_game(params) {
     }
 
     return game;
+}
+
+/* ---- Audio ---- */
+
+function _stop_music(game) {
+    if (game.muted) return;
+
+    for (let m in game.music) {
+        if (!game.music[m].paused) {
+            game.music[m].was_playing = true;
+            game.music[m].pause();
+        } else {
+            game.music[m].was_playing = false;
+        }
+    }
+}
+
+function _start_music(game, unmuting) {
+    if (game.muted && !unmuting) return;
+
+    for (let m in game.music) {
+        if (game.music[m].was_playing) {
+            game.music[m].play();
+        }
+    }
+}
+
+function _mute(game) {
+    _stop_music(game);
+    game.muted = true;
+}
+
+function _unmute(game) {
+    game.muted = false;
+    _start_music(game);
 }
 
 /* ---- Game update stuff ---- */
@@ -386,11 +468,9 @@ function _update(game, delta) {
 function _handle_mousedown(game, e) {
     if (!game.playing) return;
 
-    if (game.transition.is_transitioning) return;
-
     const rect = game.canvas.getBoundingClientRect();
-    let x = Math.floor((e.clientX - rect.left) / game.draw_scale);
-    let y = Math.floor((e.clientY - rect.top) / game.draw_scale);
+    let x = Math.round((e.clientX - rect.left) / game.draw_scale) - 1;
+    let y = Math.round((e.clientY - rect.top) / game.draw_scale) - 1;
     if (e.button === 0 && game.events.mousedown) {
         game.events.mousedown(game, e, x, y);
     }
@@ -399,16 +479,13 @@ function _handle_mousedown(game, e) {
 function _handle_mouseup(game, e) {
     if (!game.playing && game.ready_to_go) {
         /* Click to start */
-        console.log("clicktostart");
         game.play();
         return;
     }
 
-    if (game.transition.is_transitioning) return;
-
     const rect = game.canvas.getBoundingClientRect();
-    let x = Math.floor((e.clientX - rect.left) / game.draw_scale);
-    let y = Math.floor((e.clientY - rect.top) / game.draw_scale);
+    let x = Math.round((e.clientX - rect.left) / game.draw_scale) - 1;
+    let y = Math.round((e.clientY - rect.top) / game.draw_scale) - 1;
     if (e.button === 0 && game.events.mouseup) {
         game.events.mouseup(game, e, x, y);
     }
@@ -416,8 +493,8 @@ function _handle_mouseup(game, e) {
 
 function _handle_mousemove(game, e) {
     const rect = game.canvas.getBoundingClientRect();
-    let x = Math.floor((e.clientX - rect.left) / game.draw_scale);
-    let y = Math.floor((e.clientY - rect.top) / game.draw_scale);
+    let x = Math.round((e.clientX - rect.left) / game.draw_scale) - 1;
+    let y = Math.round((e.clientY - rect.top) / game.draw_scale) - 1;
     if (game.events.mousemove) {
         game.events.mousemove(game, e, x, y);
     }
@@ -433,7 +510,7 @@ function _draw(game) {
     ctx.fillStyle = game.background_color;
 
     ctx.beginPath();
-    ctx.rect(0, 0, game.canvas_w, game.canvas_h);
+    ctx.rect(0, 0, game.screen_w, game.screen_h);
     ctx.fill();
 
     game.draw_func(game.ctx.draw);
@@ -447,7 +524,7 @@ function _draw(game) {
 
     game.ctx.global.fillStyle = 'rgb(0, 0, 0)';
     game.ctx.global.beginPath();
-    game.ctx.global.rect(0, 0, game.canvas_w * game.draw_scale, game.canvas_h * game.draw_scale);
+    game.ctx.global.rect(0, 0, game.screen_w * game.draw_scale, game.screen_h * game.draw_scale);
     game.ctx.global.fill();
 
     game.ctx.global.save();
@@ -461,7 +538,7 @@ function _draw(game) {
     }
 
     if (game._norun) {
-        game.ctx.global.drawImage(game.img._pause, 0, 0);
+        screen_draw(game.img._pause, 0, 0);
     }
 
     game.ctx.global.restore();
