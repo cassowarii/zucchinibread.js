@@ -1,6 +1,8 @@
-# zucchinibread.js
+# zucchinibread.js 🥒🍞
 
-This is a distillation of some of the code I've been using to make puzzle games for the last little while. Code for loading/managing audio, loading/displaying images, running a very simple game loop, as well as a quite general and extensible 'screen transition' system. You could charitably call it a "game engine," but that might be giving it a little too much credit. I will probably add support for other stuff I like later (like spritesheets and map drawing), but I'm trying to be conservative with what I move into the library in case I need to change behaviors later.
+This is a distillation of some of the code I've been using to make puzzle games for the last little while. Code for loading/managing audio, loading/displaying images, running a very simple game loop, as well as a quite general and extensible 'screen transition' system. You could charitably call it a "game engine," but that might be giving it a little too much credit. I will probably add support for other stuff I like later (I'd like to add sprite registration points, tilemap drawing, objects that can update themselves, and clickable button UI stuff), but I'm trying to be conservative with what I move into the library in case I need to change behaviors later.
+
+Sorry about the underscores.
 
 ## How do?
 
@@ -15,14 +17,18 @@ let game;
 
 zb.ready(function() {
     game = zb.create_game({
+        /* Parameters to set up the game */
         canvas: 'mycanvas',          /* ID of your canvas element */
         canvas_w: 640,               /* Width of your drawing canvas */
         canvas_h: 480,               /* Height of your drawing canvas */
         draw_scale: 4,               /* How much the pixels should be scaled up. */
         background_color: '#000000', /* Background color that will be drawn underneath everything you draw */
+        
+        /* Functions that are called each frame to update/draw the game */
         draw_func: do_draw,          /* Function that will be called in the game loop to render the game */
         update_func: do_update,      /* Function that will be called to update the game state - 1 parameter, time delta of update in ms */
 
+        /* Event handlers for the regular JS events */
         events: {
             mouseup: mouseup_func,
             keydown: keydown_func,
@@ -30,11 +36,14 @@ zb.ready(function() {
         },                          /* Callbacks for events. Receive the game object as 1st parameter, event 2nd. */
 
         /* Optional parameters you can add: */
-        tile_size: 8,                /* How big each 'tile' in your game is. (optional, mostly just for you) */
-        level_w: 20,                 /* Width of your game levels. (optional, mostly just for you) */
-        level_h: 14,                 /* Height of your game levels. (same) */
         frame_rate: 60,              /* Frame rate the game will run at - optional, default 60 */
         run_in_background: true,     /* disable auto-pausing when clicking away from game (optional, default false) */
+        
+        /* You can also add any random extra global parameters you want to store here as well: */
+        tile_size: 8,                /* How big each 'tile' in the game is. */
+        level_w: 20,                 /* Width of the game levels. */
+        level_h: 14,                 /* Height of the game levels. */
+
     });
 
     /* CALL THE OTHER REGISTER FUNCTIONS (EXPLAINED BELOW) HERE IF YOU HAVE THEM */
@@ -105,7 +114,9 @@ game.register_music({
 });
 ```
 
-This will pull the proper music files. Note that if you do not specify a file extension, it will add either `.mp3` or `.ogg` depending on what is supported by your browser. (if you don't want to do both, it defaults to mp3 and I think most browsers nowadays support mp3? Firefox didn't used to I'm pretty sure.) Or you can just give the file extension like a normal person.
+This will pull the proper music files. Note that if you do not specify a file extension, it will add either `.mp3` or `.ogg` depending on what is supported by your browser. (if you don't want to do both, it defaults to mp3 and I think most browsers nowadays support mp3? Firefox didn't used to I'm pretty sure.) Or you can just give the file extension like a normal person. Anyway, these are just normal `audio` objects, except that they automatically pause when you click out of the game if `run_in_background` is set to false.
+
+Also, you can mute the game's sound with `game.mute()`, unmute with `game.unmute()`, or toggle mute with `game.toggle_mute()`.
 
 ### If you please, draw me a sheep
 
