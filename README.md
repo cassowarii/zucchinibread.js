@@ -8,9 +8,17 @@ Sorry about the underscores.
 
 ### setup
 
-Make sure your `index.html` has a `<canvas>` element that has some ID. This is the canvas that will be used for drawing.
+Create an `index.html` file to hold your game. Make sure it has a `<canvas>` element that has some ID. This is the canvas that will be used for drawing.
 
-Create a file `game.js`. Here is how to initialize your game:
+I recommend just dropping `zucchinibread.js` into your project folder and doing something like
+```
+<script src="zucchinibread.js"></script>
+<script src="game.js"></script>
+```
+
+Now make a file `game.js` where you put your game logic.
+
+Here is how to initialize your game:
 
 ```
 let game;
@@ -38,6 +46,7 @@ zb.ready(function() {
         /* Optional parameters you can add: */
         frame_rate: 60,              /* Frame rate the game will run at - optional, default 60 */
         run_in_background: true,     /* disable auto-pausing when clicking away from game (optional, default false) */
+        save_key: 'example.game.hi', /* put this to enable saving; key where the save file will be stored in localStorage */
         
         /* You can also add any random extra global parameters you want to store here as well: */
         tile_size: 8,                /* How big each 'tile' in the game is. */
@@ -53,6 +62,8 @@ zb.ready(function() {
     /* Do any other initialization you need to here. */
 });
 ```
+
+Oh no global state!! Well, it's a video game. ;)
 
 Make sure you call `resources_ready()` after you register all your resources, or the game will never finish loading. It's like a safety feature, to let the game know you're done telling it to load new stuff.
 
@@ -126,6 +137,18 @@ You can draw stuff in a few different ways. The `draw` function gets passed the 
 * `zb.sprite_draw(context, image, section_w, section_h, section_x, section_y, dest_x, dest_y)`: This one divides up the source image into chunks of size `section_w` x `section_h`, then takes the chunk at grid location (`section_x`, `section_y`) and draws it to the screen at coordinates (`dest_x`, `dest_y`). Useful for drawing tilemaps and/or sprite animations!
 
 Each of these takes the drawing context as the first argument and the image as the second argument.
+
+### Save load
+
+If you specified a `save_key` when creating your game, you have save/load functionality.
+
+If the user has third party cookies disabled in chrome, this will block saving. So you will need to provide another full-screen image in the root folder, `saveerror.png`, which will be shown before the game starts and should warn the user about the fact that their game will not be able to save.
+
+You also get access to these two functions:
+* `game.save(key, data)`: Saves the data `data` under the key `key`. Pretty self-explanatory. It saves using `JSON.stringify`, so make sure to only ... save ... stuff that can be stringified?? Sure
+* `game.load(key)`: Returns the data that was previously saved under `key`, or `undefined` if nothing was saved there.
+
+These functions silently fail if saving does not work due to having cookies disabled. I should probably add a way to tell if saving is broken... :/
 
 ### random extra utility functions
 
