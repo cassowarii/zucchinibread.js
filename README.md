@@ -6,15 +6,15 @@ This is a distillation of some of the code I've been using to make puzzle games 
 
 ### setup
 
-Make sure your `index.html` has a `<canvas>` element with the id `canvas`. This is the canvas that will be used for drawing. I will add a feature to let you change that later.
+Make sure your `index.html` has a `<canvas>` element that has some ID. This is the canvas that will be used for drawing.
 
 Create a file `game.js`. Here is how to initialize your game:
 
 ```
 let game;
 
-ready(function() {
-    game = create_game({
+zb.ready(function() {
+    game = zb.create_game({
         canvas: 'mycanvas',          /* ID of your canvas element */
         canvas_w: 640,               /* Width of your drawing canvas */
         canvas_h: 480,               /* Height of your drawing canvas */
@@ -51,8 +51,7 @@ Also, make sure to provide three images in the root folder: `loading.png`, `clic
 
 ### resource loading
 
-
-Here are the things the engine knows how to do, which you should load :
+Here are the things the engine knows how to do, which you should load in the `ready` function after creating the game object:
 
 #### sound effects
 
@@ -106,7 +105,22 @@ game.register_music({
 });
 ```
 
-This will pull the proper music files. Note that you **should not specify a file extension**. It will add either `.mp3` or `.ogg` depending on what is supported by your browser, so be sure to provide both (if you don't want to do both, it defaults to mp3 and I think most browsers nowadays support mp3? Firefox didn't used to I'm pretty sure)
+This will pull the proper music files. Note that if you do not specify a file extension, it will add either `.mp3` or `.ogg` depending on what is supported by your browser. (if you don't want to do both, it defaults to mp3 and I think most browsers nowadays support mp3? Firefox didn't used to I'm pretty sure.) Or you can just give the file extension like a normal person.
+
+### If you please, draw me a sheep
+
+You can draw stuff in a few different ways. The `draw` function gets passed the 'drawing canvas', which is a normal HTML canvas 2D context which gets scaled up by a factor of `draw_scale` and then drawn to your original canvas. You can draw shapes or images with the [normal HTML canvas drawing functions](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial). Additionally, the library provides a few convenience functions to draw images or parts of images:
+
+* `zb.screen_draw(context, image)`: Draws an image over the whole screen. Actually it just draws the image at (0, 0). Since this engine doesn't really have text support, this is usually how I handle drawing text for each level -- just make a big image that's the size of the screen and put text wherever you want. As a bonus, you can draw images and stuff into it as well! Wow so flexible!
+* `zb.sprite_draw(context, image, section_w, section_h, section_x, section_y, dest_x, dest_y)`: This one divides up the source image into chunks of size `section_w` x `section_h`, then takes the chunk at grid location (`section_x`, `section_y`) and draws it to the screen at coordinates (`dest_x`, `dest_y`). Useful for drawing tilemaps and/or sprite animations!
+
+Each of these takes the drawing context as the first argument and the image as the second argument.
+
+### random extra utility functions
+
+Currently there is only one of these.
+
+* `zb.mod(number, modulo)`: This takes the number `number` and gives you the result of `number` modulo `modulo`. It works the same as the normal Javascript `%` operator, except that the output is always guaranteed to be within the range [0, `modulo`), which isn't true of regular `%` when the first value is negative. Since the default `%` behavior is basically something I've never wanted ever, this is a convenience function that does the correct thing instead.
 
 ### mapcompile.py
 
