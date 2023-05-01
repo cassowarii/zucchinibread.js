@@ -337,7 +337,6 @@ let zb = (function() {
 
         canvas.onkeydown = function(e) {
             if (!game._norun && game.events.keydown) {
-                console.log("E");
                 game.events.keydown(game, e);
                 e.preventDefault();
             }
@@ -499,7 +498,11 @@ let zb = (function() {
                 /* Test if save/load is working */
                 try {
                     console.log("Test saving");
-                    localStorage.setItem(game.save_key, JSON.stringify({}));
+                    localStorage.setItem(game.save_key + ".test", "savetest");
+                    let savetest = localStorage.getItem(game.save_key + ".test");
+                    if (savetest !== "savetest") {
+                        throw new Error("oops");
+                    }
                 } catch (e) {
                     /* If error saving, show save error message first */
                     /* We set _show_save_error so that the second time the user clicks,
@@ -572,7 +575,7 @@ let zb = (function() {
         }
 
         if (game._norun) {
-            screen_draw(game.img._pause, 0, 0);
+            game.ctx.global.drawImage(game.img._pause, 0, 0);
         }
 
         game.ctx.global.restore();
@@ -601,7 +604,7 @@ let zb = (function() {
         }
 
         try {
-            save_data = localStorage.getItem(game.save_key);
+            save_data = localStorage.getItem(game.save_key) || "{}";
         } catch (e) {
             console.error("Saving is disabled; cannot save " + key, e);
             return;
@@ -650,6 +653,10 @@ let zb = (function() {
         } catch (e) {
             console.error("Cannot parse stored save data (when trying to load " + key + ")", e);
             return;
+        }
+
+        if (!save_data) {
+            return null;
         }
 
         return save_data[key];
