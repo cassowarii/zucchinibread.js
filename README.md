@@ -33,8 +33,8 @@ zb.ready(function() {
         background_color: '#000000', /* Background color that will be drawn underneath everything you draw */
         
         /* Functions that are called each frame to update/draw the game */
-        draw_func: do_draw,          /* Function that will be called in the game loop to render the game */
-        update_func: do_update,      /* Function that will be called to update the game state - 1 parameter, time delta of update in ms */
+        draw_func: do_draw,          /* Function that will be called in the game loop to render the game - receives canvas context as parameter */
+        update_func: do_update,      /* Function that will be called to update the game state - receives time delta of update in ms as parameter */
 
         /* Event handlers for the regular JS events */
         events: {
