@@ -65,6 +65,8 @@ zb.ready(function() {
 
 Oh no global state!! Well, it's a video game. ;)
 
+You will get some extra properties automatically calculated as well: `game.screen_w` and `game.screen_h` will hold the actual pixel dimensions of your game screen (i.e. `canvas_w / draw_scale` and `canvas_h / draw_scale`).
+
 Make sure you call `resources_ready()` after you register all your resources, or the game will never finish loading. It's like a safety feature, to let the game know you're done telling it to load new stuff.
 
 Also, make sure to provide three images in the root folder: `loading.png`, `clicktostart.png`, and `pause.png`, which will be drawn over the full screen (a) when the game is loading; (b) when it has finished loading and should be clicked to start; (c) when you click out of the game and it pauses. (`pause.png` is optional if `run_in_background` is enabled)
@@ -137,6 +139,10 @@ You can draw stuff in a few different ways. The `draw` function gets passed the 
 * `zb.sprite_draw(context, image, section_w, section_h, section_x, section_y, dest_x, dest_y)`: This one divides up the source image into chunks of size `section_w` x `section_h`, then takes the chunk at grid location (`section_x`, `section_y`) and draws it to the screen at coordinates (`dest_x`, `dest_y`). Useful for drawing tilemaps and/or sprite animations!
 
 Each of these takes the drawing context as the first argument and the image as the second argument.
+
+### Screen transitions
+
+I need to document these still... I also have a dream of rewriting the interface, so documentation is kind of pending that!
 
 ### Save load
 
