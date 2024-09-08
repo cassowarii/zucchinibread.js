@@ -71,6 +71,8 @@ Make sure you call `resources_ready()` after you register all your resources, or
 
 Also, make sure to provide three images in the root folder: `loading.png`, `clicktostart.png`, and `pause.png`, which will be drawn over the full screen (a) when the game is loading; (b) when it has finished loading and should be clicked to start; (c) when you click out of the game and it pauses. (`pause.png` is optional if `run_in_background` is enabled)
 
+Your game logic should go in the callbacks which are passed as `update_func`, and your drawing logic should live in the callback you pass as `draw_func`. I should probably elaborate more on this later.
+
 ### resource loading
 
 Here are the things the engine knows how to do, which you should load in the `ready` function after creating the game object:
@@ -158,9 +160,9 @@ These functions silently fail if saving does not work due to having cookies disa
 
 ### random extra utility functions
 
-Currently there is only one of these.
-
 * `zb.mod(number, modulo)`: This takes the number `number` and gives you the result of `number` modulo `modulo`. It works the same as the normal Javascript `%` operator, except that the output is always guaranteed to be within the range [0, `modulo`), which isn't true of regular `%` when the first value is negative. Since the default `%` behavior is basically something I've never wanted ever, this is a convenience function that does the correct thing instead.
+* `zb.copy_list(list)`: Copies a list shallowly and returns a new copy of it.
+* `zb.copy_flat_objlist(list)`: Copies a list of objects one level deep, i.e. it will copy each object in the list using `{ ...object }`, but it is not a full deep copy. Still, this type of function comes in handy especially when writing 'undo' logic.
 
 ### mapcompile.py
 
