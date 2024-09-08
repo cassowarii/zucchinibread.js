@@ -10,6 +10,22 @@ let zb = (function() {
          return ((x%n)+n)%n;
     }
 
+    function copy_list(list) {
+        let newlist = [];
+        for (let x of list) {
+            newlist.push(x);
+        }
+        return newlist;
+    }
+
+    function copy_flat_objlist(list) {
+        let newlist = [];
+        for (let x of list) {
+            newlist.push({ ...x });
+        }
+        return newlist;
+    }
+
     /* ---- Resource loading / loading screen ---- */
 
     let _audiocheck = document.createElement('audio');
@@ -335,6 +351,27 @@ let zb = (function() {
             }
         }
 
+        canvas.ontouchstart = function(e) {
+            if (!game._norun) {
+                _handle_touchstart(game, e);
+            }
+            e.preventDefault();
+        }
+
+        canvas.ontouchmove = function(e) {
+            if (!game._norun) {
+                _handle_touchmove(game, e);
+            }
+            e.preventDefault();
+        }
+
+        canvas.ontouchend = function(e) {
+            if (!game._norun) {
+                _handle_touchend(game, e);
+            }
+            e.preventDefault();
+        }
+
         canvas.onkeydown = function(e) {
             if (!game._norun && game.events.keydown) {
                 game.events.keydown(game, e);
@@ -484,8 +521,8 @@ let zb = (function() {
         if (!game.playing) return;
 
         const rect = game.canvas.getBoundingClientRect();
-        let x = Math.round((e.clientX - rect.left) / game.draw_scale) - 1;
-        let y = Math.round((e.clientY - rect.top) / game.draw_scale) - 1;
+        let x = Math.round((e.clientX - rect.left) / rect.width * game.screen_w) - 1;
+        let y = Math.round((e.clientY - rect.top) / rect.height * game.screen_h) - 1;
         if (e.button === 0 && game.events.mousedown) {
             game.events.mousedown(game, e, x, y);
         }
@@ -521,8 +558,8 @@ let zb = (function() {
         }
 
         const rect = game.canvas.getBoundingClientRect();
-        let x = Math.round((e.clientX - rect.left) / game.draw_scale) - 1;
-        let y = Math.round((e.clientY - rect.top) / game.draw_scale) - 1;
+        let x = Math.round((e.clientX - rect.left) / rect.width * game.screen_w) - 1;
+        let y = Math.round((e.clientY - rect.top) / rect.height * game.screen_h) - 1;
         if (e.button === 0 && game.events.mouseup) {
             game.events.mouseup(game, e, x, y);
         }
@@ -530,9 +567,64 @@ let zb = (function() {
 
     function _handle_mousemove(game, e) {
         const rect = game.canvas.getBoundingClientRect();
-        let x = Math.round((e.clientX - rect.left) / game.draw_scale) - 1;
-        let y = Math.round((e.clientY - rect.top) / game.draw_scale) - 1;
+        let x = Math.round((e.clientX - rect.left) / rect.width * game.screen_w) - 1;
+        let y = Math.round((e.clientY - rect.top) / rect.height * game.screen_h) - 1;
         if (game.events.mousemove) {
+            game.events.mousemove(game, e, x, y);
+        }
+    }
+
+    /* ---- Touch (defaults to same as mouse) ---- */
+
+    function _handle_touchstart(game, e) {
+        if (!game.playing) return;
+
+        if (e.touches) e = e.touches[0];
+
+        const rect = game.canvas.getBoundingClientRect();
+        let x = Math.round((e.clientX - rect.left) / rect.width * game.screen_w) - 1;
+        let y = Math.round((e.clientY - rect.top) / rect.height * game.screen_h) - 1;
+        if (game.events.touchstart) {
+            game.events.touchstart(game, e, x, y);
+        } else if (game.events.mousedown) {
+            if (game.events.mousemove) {
+                game.events.mousemove(game, e, x, y);
+            }
+            game.events.mousedown(game, e, x, y);
+        }
+    }
+
+    function _handle_touchend(game, e) {
+        if (!game.playing && game.ready_to_go) {
+            /* Click to start */
+            game.play();
+            return;
+        }
+
+        const rect = game.canvas.getBoundingClientRect();
+        let x = Math.round((e.clientX - rect.left) / rect.width * game.screen_w) - 1;
+        let y = Math.round((e.clientY - rect.top) / rect.height * game.screen_h) - 1;
+        if (game.events.touchend) {
+            game.events.touchend(game, e, x, y);
+        } else if (game.events.mouseup) {
+            if (game.events.mousemove) {
+                game.events.mousemove(game, e, x, y);
+            }
+            game.events.mouseup(game, e, x, y);
+        }
+    }
+
+    function _handle_touchmove(game, e) {
+        if (!game.playing) return;
+
+        if (e.touches) e = e.touches[0];
+
+        const rect = game.canvas.getBoundingClientRect();
+        let x = Math.round((e.clientX - rect.left) / rect.width * game.screen_w) - 1;
+        let y = Math.round((e.clientY - rect.top) / rect.height * game.screen_h) - 1;
+        if (game.events.touchmove) {
+            game.events.touchmove(game, e, x, y);
+        } else if (game.events.mousemove) {
             game.events.mousemove(game, e, x, y);
         }
     }
@@ -1125,6 +1217,8 @@ let zb = (function() {
         create_game: create_game,
         ready: ready,
         mod: mod,
+        copy_list: copy_list,
+        copy_flat_objlist: copy_flat_objlist,
         sprite_draw: sprite_draw,
         screen_draw: screen_draw,
         transition: TransitionType,
