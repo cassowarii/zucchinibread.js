@@ -71,7 +71,7 @@ Make sure you call `resources_ready()` after you register all your resources, or
 
 Also, make sure to provide three images in the root folder: `loading.png`, `clicktostart.png`, and `pause.png`, which will be drawn over the full screen (a) when the game is loading; (b) when it has finished loading and should be clicked to start; (c) when you click out of the game and it pauses. (`pause.png` is optional if `run_in_background` is enabled)
 
-Your game logic should go in the callbacks which are passed as `update_func`, and your drawing logic should live in the callback you pass as `draw_func`. I should probably elaborate more on this later.
+Your game logic should go in the callback which is passed as `update_func`, and your drawing logic should live in the callback which is passed as `draw_func`. I should probably elaborate more on this later.
 
 ### resource loading
 
