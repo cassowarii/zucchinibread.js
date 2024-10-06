@@ -576,10 +576,14 @@ let zb = (function() {
 
     /* ---- Touch (defaults to same as mouse) ---- */
 
+    let _last_touch_event;
+
     function _handle_touchstart(game, e) {
         if (!game.playing) return;
 
         if (e.touches) e = e.touches[0];
+
+        _last_touch_event = e;
 
         const rect = game.canvas.getBoundingClientRect();
         let x = Math.round((e.clientX - rect.left) / rect.width * game.screen_w) - 1;
@@ -602,8 +606,8 @@ let zb = (function() {
         }
 
         const rect = game.canvas.getBoundingClientRect();
-        let x = Math.round((e.clientX - rect.left) / rect.width * game.screen_w) - 1;
-        let y = Math.round((e.clientY - rect.top) / rect.height * game.screen_h) - 1;
+        let x = Math.round((_last_touch_event.clientX - rect.left) / rect.width * game.screen_w) - 1;
+        let y = Math.round((_last_touch_event.clientY - rect.top) / rect.height * game.screen_h) - 1;
         if (game.events.touchend) {
             game.events.touchend(game, e, x, y);
         } else if (game.events.mouseup) {
@@ -618,6 +622,8 @@ let zb = (function() {
         if (!game.playing) return;
 
         if (e.touches) e = e.touches[0];
+
+        _last_touch_event = e;
 
         const rect = game.canvas.getBoundingClientRect();
         let x = Math.round((e.clientX - rect.left) / rect.width * game.screen_w) - 1;
