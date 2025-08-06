@@ -10,6 +10,26 @@ let zb = (function() {
          return ((x%n)+n)%n;
     }
 
+    function sgn(x) {
+         if (x === 0) {
+             return 0;
+         } else {
+             return x / Math.abs(x);
+         }
+    }
+
+    function as_hex(num, length) {
+        let result = Math.round(num).toString(16);
+
+        if (length) {
+            while (result.length < length) {
+                result = "0" + result;
+            }
+        }
+
+        return result;
+    }
+
     function copy_list(list) {
         let newlist = [];
         for (let x of list) {
@@ -26,6 +46,18 @@ let zb = (function() {
         return newlist;
     }
 
+    function rand_int(a, b) {
+        let min = 0;
+        let max = 0;
+        if (b === undefined) {
+            max = a;
+        } else {
+            min = a;
+            max = b;
+        }
+        return Math.floor(Math.random() * (max - min) + min);
+    }
+
     /* ---- Resource loading / loading screen ---- */
 
     let _audiocheck = document.createElement('audio');
@@ -40,6 +72,24 @@ let zb = (function() {
             if (!game.ready_to_go) {
                 game._things_loaded ++;
                 console.log("Loaded", name + ". Things loaded:", game._things_loaded, "/", game._total_things_to_load);
+                if (game.load_with_progress_bar) {
+                    if (game._progressbar_img_loaded) {
+                        game.ctx.global.save();
+                        game.ctx.global.scale(game.draw_scale, game.draw_scale);
+                        game.ctx.global.drawImage(
+                            game.img._progressbar,
+                            0,
+                            0,
+                            Math.round(game._things_loaded / game._total_things_to_load * game.img._progressbar.width),
+                            game.img._progressbar.height,
+                            Math.round(game.canvas_w / 2 / game.draw_scale - game.img._progressbar.width / 2),
+                            Math.round(game.canvas_h / 2 / game.draw_scale - game.img._progressbar.height / 2),
+                            Math.round(game._things_loaded / game._total_things_to_load * game.img._progressbar.width),
+                            game.img._progressbar.height,
+                        );
+                        game.ctx.global.restore();
+                    }
+                }
                 _check_if_loaded(game);
                 if (callback) {
                     callback();
@@ -73,8 +123,9 @@ let zb = (function() {
 
     function _register_sfx(sfxdata, game) {
         for (let key in sfxdata) {
-            let sfx_array = new Array(_SFX_ARRAY_SIZE);
-            for (let i = 0; i < _SFX_ARRAY_SIZE; i++) {
+            let sfx_size = sfxdata[key].copies || _SFX_ARRAY_SIZE;
+            let sfx_array = new Array(sfx_size);
+            for (let i = 0; i < sfx_size; i++) {
                 sfx_array[i] = new Audio(sfxdata[key].path);
                 sfx_array[i].addEventListener('canplaythrough',
                     _register_resource(sfxdata[key].path + '#' + (i+1), game), false);
@@ -167,6 +218,19 @@ let zb = (function() {
         for (let k in loaded_imgs) {
             game.img[k] = loaded_imgs[k];
         }
+    }
+
+    function _create_canvas_context(canvas) {
+        let new_canvas = document.createElement('canvas');
+        new_canvas.width = canvas.width;
+        new_canvas.height = canvas.height;
+
+        let new_ctx = new_canvas.getContext('2d');
+        new_ctx.imageSmoothingEnabled = false;
+        new_ctx.webkitImageSmoothingEnabled = false;
+        new_ctx.mozImageSmoothingEnabled = false;
+
+        return new_ctx;
     }
 
     function create_game(params) {
@@ -288,6 +352,10 @@ let zb = (function() {
                 copy: copy_ctx,     /* context for copying the old screen on transition */
                 draw: draw_ctx,     /* context for drawing the real level */
             },
+            create_canvas_context: function() {
+                /* Function to return a fresh screen-sized canvas context, if we need it. */
+                return _create_canvas_context(this.canvas);
+            },
             img: {},
             register_images: function(imgdata) {
                 _register_images(imgdata, this);
@@ -308,6 +376,14 @@ let zb = (function() {
             },
             long_transition: function(type, length, callback, on_done) {
                 _long_transition(this, type, length, callback, on_done);
+            },
+
+            /* Input */
+            touchmode: false,
+
+            /* Mode */
+            change_mode: function(newmode) {
+                _change_mode(game, newmode);
             }
         };
 
@@ -353,6 +429,7 @@ let zb = (function() {
 
         canvas.ontouchstart = function(e) {
             if (!game._norun) {
+                game.touchmode = true;
                 _handle_touchstart(game, e);
             }
             e.preventDefault();
@@ -360,6 +437,7 @@ let zb = (function() {
 
         canvas.ontouchmove = function(e) {
             if (!game._norun) {
+                game.touchmode = true;
                 _handle_touchmove(game, e);
             }
             e.preventDefault();
@@ -367,6 +445,7 @@ let zb = (function() {
 
         canvas.ontouchend = function(e) {
             if (!game._norun) {
+                game.touchmode = true;
                 _handle_touchend(game, e);
             }
             e.preventDefault();
@@ -414,6 +493,27 @@ let zb = (function() {
             }
         });
         loading_img.src = 'loading.png';
+
+        if (game.load_with_progress_bar) {
+            game._progressbar_img_loaded = false;
+            game._progressbar_width = 0;
+            game._progressbar_height = 0;
+
+            let progressbar_img = new Image();
+            progressbar_img.onload = _register_resource('progressbar.png', game, function() {
+                game._progressbar_img_loaded = true;
+                game._progressbar_width = progressbar_img.width;
+                game._progressbar_height = progressbar_img.height;
+                if (!game.ready_to_go) {
+                    game.ctx.global.save();
+                    game.ctx.global.scale(game.draw_scale, game.draw_scale);
+                    game.ctx.global.drawImage(loading_img, 0, 0);
+                    game.ctx.global.restore();
+                }
+            });
+            progressbar_img.src = 'progressbar.png';
+            game.img._progressbar = progressbar_img;
+        }
 
         if (!game.run_in_background) {
             let pause_img = new Image();
@@ -505,7 +605,13 @@ let zb = (function() {
     }
 
     function _update(game, delta) {
-        game.update_func(delta);
+        if (game.update_func) {
+            game.update_func(delta);
+        }
+
+        if (game.modes && game.modes.hasOwnProperty(game.mode) && game.modes[game.mode].update) {
+            game.modes[game.mode].update(delta);
+        }
 
         if (game.transition.is_transitioning) {
             game.transition.timer += delta;
@@ -515,10 +621,73 @@ let zb = (function() {
         }
     }
 
+    function _change_mode(game, newmode) {
+        game.mode = newmode;
+    }
+
+    /* ---- UI ---- */
+
+    function create_buttons(button_data) {
+        for (let b of button_data.buttons) {
+            b.state = 0;
+        }
+
+        return button_data;
+    }
+
+    /* Call with a button set and given x / y mouse coordinates.
+     * Will update the button set in place.
+     * Should generally be called in mouse move and mouse up event handlers. */
+    function update_buttons(button_data, x, y) {
+        for (let button of button_data.buttons) {
+            if (button.state === 2) continue;
+            if (button.disabled) continue;
+
+            if (x >= button.x && x < button.x + button_data.button_w && y >= button.y && y < button.y + button_data.button_h) {
+                if (!game.touchmode) {
+                    button.state = 1;
+                }
+            } else if (button.state !== 2) {
+                button.state = 0;
+            }
+        }
+    }
+
+    /* Call with a button set and given x / y mouse coordinates.
+     * If a button is clicked, triggers its callback and returns true.
+     * Otherwise, returns false.
+     * Should be called in mouse down event handler. */
+    function click_button(button_data, x, y) {
+        for (let button of button_data.buttons) {
+            if (button.disabled) continue;
+
+            if (x >= button.x && x < button.x + button_data.button_w && y >= button.y && y < button.y + button_data.button_h) {
+                button.state = 2;
+                game._clicked_button = button;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function _handle_clicked_button(game) {
+        if (game._clicked_button) {
+            game._clicked_button.state = 0;
+            _draw(game);
+            if (game._clicked_button.callback) {
+                game._clicked_button.callback();
+            }
+            game._clicked_button = null;
+            return;
+        }
+    }
+
     /* ---- Mouse ---- */
 
     function _handle_mousedown(game, e) {
         if (!game.playing) return;
+
+        game.touchmode = false;
 
         const rect = game.canvas.getBoundingClientRect();
         let x = Math.round((e.clientX - rect.left) / rect.width * game.screen_w) - 1;
@@ -557,15 +726,22 @@ let zb = (function() {
             return;
         }
 
+        game.touchmode = false;
+
         const rect = game.canvas.getBoundingClientRect();
         let x = Math.round((e.clientX - rect.left) / rect.width * game.screen_w) - 1;
         let y = Math.round((e.clientY - rect.top) / rect.height * game.screen_h) - 1;
+
+        _handle_clicked_button(game);
+
         if (e.button === 0 && game.events.mouseup) {
             game.events.mouseup(game, e, x, y);
         }
     }
 
     function _handle_mousemove(game, e) {
+        game.touchmode = false;
+
         const rect = game.canvas.getBoundingClientRect();
         let x = Math.round((e.clientX - rect.left) / rect.width * game.screen_w) - 1;
         let y = Math.round((e.clientY - rect.top) / rect.height * game.screen_h) - 1;
@@ -580,6 +756,8 @@ let zb = (function() {
 
     function _handle_touchstart(game, e) {
         if (!game.playing) return;
+
+        game.touchmode = true;
 
         if (e.touches) e = e.touches[0];
 
@@ -605,9 +783,14 @@ let zb = (function() {
             return;
         }
 
+        game.touchmode = true;
+
         const rect = game.canvas.getBoundingClientRect();
         let x = Math.round((_last_touch_event.clientX - rect.left) / rect.width * game.screen_w) - 1;
         let y = Math.round((_last_touch_event.clientY - rect.top) / rect.height * game.screen_h) - 1;
+
+        _handle_clicked_button(game);
+
         if (game.events.touchend) {
             game.events.touchend(game, e, x, y);
         } else if (game.events.mouseup) {
@@ -620,6 +803,8 @@ let zb = (function() {
 
     function _handle_touchmove(game, e) {
         if (!game.playing) return;
+
+        game.touchmode = true;
 
         if (e.touches) e = e.touches[0];
 
@@ -638,24 +823,39 @@ let zb = (function() {
     /* ---- Drawing stuff ---- */
 
     function _draw(game) {
-        let ctx = game.ctx.draw;
+        game.ctx.draw.save();
 
-        ctx.save();
+        game.ctx.draw.fillStyle = game.background_color;
 
-        ctx.fillStyle = game.background_color;
+        game.ctx.draw.beginPath();
+        game.ctx.draw.rect(0, 0, game.screen_w, game.screen_h);
+        game.ctx.draw.fill();
 
-        ctx.beginPath();
-        ctx.rect(0, 0, game.screen_w, game.screen_h);
-        ctx.fill();
-
-        game.draw_func(game.ctx.draw);
-
-        if (game.transition.mid_long) {
-            ctx.fillStyle = game.transition.color;
-            ctx.fillRect(-1, -1, game.canvas_w + 5, game.canvas_h + 5);
+        if (game.draw_func) {
+            game.draw_func(game.ctx.draw);
         }
 
-        ctx.restore();
+        if (game.modes && game.modes.hasOwnProperty(game.mode) && game.modes[game.mode].draw) {
+            game.modes[game.mode].draw(game.ctx.draw);
+        }
+
+        if (game.transition.mid_long) {
+            game.ctx.draw.fillStyle = game.transition.color;
+            game.ctx.draw.fillRect(-1, -1, game.canvas_w + 5, game.canvas_h + 5);
+        }
+
+        game.ctx.draw.restore();
+
+        if (game.transition.is_transitioning) {
+            _draw_transition(game, game.ctx.mask);
+        } else {
+            game.ctx.mask.drawImage(game.ctx.draw.canvas, 0, 0);
+        }
+
+        if (game.modes && game.modes.hasOwnProperty(game.mode) && game.modes[game.mode].draw_after_transition) {
+            game.modes[game.mode].draw_after_transition(game.ctx.mask);
+        }
+
 
         game.ctx.global.fillStyle = 'rgb(0, 0, 0)';
         game.ctx.global.beginPath();
@@ -666,11 +866,7 @@ let zb = (function() {
 
         game.ctx.global.scale(game.draw_scale, game.draw_scale);
 
-        game.ctx.global.drawImage(ctx.canvas, 0, 0);
-
-        if (game.transition.is_transitioning) {
-            _draw_transition(game);
-        }
+        game.ctx.global.drawImage(game.ctx.mask.canvas, 0, 0);
 
         if (game._norun) {
             game.ctx.global.drawImage(game.img._pause, 0, 0);
@@ -690,6 +886,16 @@ let zb = (function() {
     /* Draw an image over the whole screen lol */
     function screen_draw(ctx, img) {
         ctx.drawImage(img, 0, 0);
+    }
+
+    /* Draw a set of buttons. */
+    function button_draw(ctx, button_data) {
+        for (let button of button_data.buttons) {
+            if (!button.state) button.state = 0;
+            let button_state = button.state;
+            if (button.disabled) button_state = 3;
+            sprite_draw(ctx, button_data.img, button_data.button_w, button_data.button_h, button.id, button_state, button.x, button.y);
+        }
     }
 
     /* ---- Save ---- */
@@ -762,8 +968,6 @@ let zb = (function() {
 
     /* ---- Transition stuff ---- */
 
-    let TransitionType = { DOTS: 1, SLIDE_DOWN: 2, SLIDE_UP: 3, FADE: 4, CIRCLE: 5 };
-
     let _transition = {
         is_transitioning: false,
         timer: 0,
@@ -775,7 +979,7 @@ let zb = (function() {
         invert_shape: true,
         mid_long: false,
         done_func: null,
-        type: TransitionType.DOTS,
+        type: _draw_fade_transition,
         nodraw: false,
         end_time: 100,
     }
@@ -814,18 +1018,15 @@ let zb = (function() {
             game.transition.done_func = on_done;
         }
 
+        game.transition.timer = 0;
         game.transition.type = type;
         game.transition.end_time = length;
 
         game.ctx.copy.drawImage(game.ctx.draw.canvas, 0, 0);
 
-        game.transition.dir_invert_v = Math.random() < 0.5;
-        game.transition.dir_invert_h = Math.random() < 0.5;
-
         callback();
 
         game.transition.is_transitioning = true;
-        game.transition.timer = 0;
     }
 
     function _finish_transition(game) {
@@ -840,152 +1041,34 @@ let zb = (function() {
         }
     }
 
-    function _draw_transition(game) {
-        game.ctx.global.save();
+    function _draw_transition(game, ctx) {
+        let frac = game.transition.timer / game.transition.end_time;
 
-        if (game.transition.type == TransitionType.DOTS) {
-            game.ctx.mask.clearRect(0, 0, game.screen_w, game.screen_h);
-            _draw_transition_dot_mask(game, game.ctx.mask);
-
-            // Redraw to reduce antialiasing effects
-            for (let i = 0; i < 5; i++) {
-                game.ctx.mask.drawImage(game.ctx.mask.canvas, 0, 0);
-            }
-
-            game.ctx.mask.globalCompositeOperation = 'source-in';
-            game.ctx.mask.drawImage(game.ctx.copy.canvas, 0, 0);
-            game.ctx.mask.globalCompositeOperation = 'source-over';
-
-            game.ctx.global.drawImage(game.ctx.mask.canvas, 0, 0);
-        } else if (game.transition.type == TransitionType.SLIDE_DOWN) {
-            let offset = game.transition.timer / game.transition.end_time * game.screen_h;
-
-            game.ctx.global.drawImage(game.ctx.copy.canvas, 0, -offset);
-            game.ctx.global.drawImage(ctx.canvas, 0, game.screen_h - offset);
-        } else if (game.transition.type == TransitionType.SLIDE_UP) {
-            let offset = game.transition.timer / game.transition.end_time * game.screen_h;
-
-            game.ctx.global.drawImage(game.ctx.copy.canvas, 0, offset);
-            game.ctx.global.drawImage(ctx.canvas, 0, - game.screen_h + offset);
-        } else if (game.transition.type == TransitionType.FADE) {
-            let alpha = 0;
-            alpha = 1 - game.transition.timer / game.transition.end_time;
-
-            game.ctx.mask.clearRect(0, 0, game.screen_w, game.screen_h);
-            game.ctx.mask.fillStyle = 'rgba(255,255,255,' + alpha + ')';
-            game.ctx.mask.fillRect(0, 0, game.screen_w, game.screen_h);
-            game.ctx.mask.globalCompositeOperation = 'source-in';
-            game.ctx.mask.drawImage(game.ctx.copy.canvas, 0, 0);
-            game.ctx.mask.globalCompositeOperation = 'source-over';
-
-            game.ctx.global.drawImage(game.ctx.mask.canvas, 0, 0);
-        } else if (game.transition.type == TransitionType.CIRCLE) {
-            game.ctx.mask.clearRect(0, 0, game.screen_w, game.screen_h);
-
-            let frac = game.transition.timer / game.transition.end_time;
-            if (!game.transition.invert_shape) {
-                frac = 1 - frac;
-            }
-            frac = Math.pow(frac, 1.5);
-
-            let cx = character.x + 0.5;
-            let cy = character.y + 0.5;
-            let lh = game.level_h + 1;
-            let distances_to_corners = [
-                Math.sqrt(Math.pow(cx * game.tile_size, 2) + Math.pow(cy * game.tile_size, 2)),
-                Math.sqrt(Math.pow((game.level_w - cx) * game.tile_size, 2) + Math.pow(cy * game.tile_size, 2)),
-                Math.sqrt(Math.pow(cx * game.tile_size, 2) + Math.pow((lh - cy) * game.tile_size, 2)),
-                Math.sqrt(Math.pow((game.level_w - cx) * game.tile_size, 2) + Math.pow((lh - cy) * game.tile_size, 2)),
-            ];
-            let max_radius = Math.max(...distances_to_corners);
-            let radius = frac * max_radius;
-
-            game.ctx.mask.globalCompositeOperation = 'source-over';
-            game.ctx.mask.drawImage(game.ctx.copy.canvas, 0, 0);
-
-            game.ctx.mask.globalCompositeOperation = 'destination-out';
-            game.ctx.mask.fillStyle = 'rgba(255,255,255)';
-            game.ctx.mask.beginPath();
-            if (!game.transition.invert_shape) {
-                game.ctx.mask.rect(-5, -5, game.screen_w + 5, game.screen_h + 5);
-            }
-            game.ctx.mask.arc(character.x * game.tile_size + game.tile_size / 2,
-                character.y * game.tile_size + game.tile_size / 2,
-                radius, 0, 2 * Math.PI,
-                !game.transition.invert_shape);
-            game.ctx.mask.fill();
-
-            game.ctx.mask.globalCompositeOperation = 'source-over';
-
-            game.ctx.global.drawImage(game.ctx.mask.canvas, 0, 0);
-        }
-
-        game.ctx.global.restore();
+        ctx.save();
+        ctx.clearRect(0, 0, game.screen_w, game.screen_h);
+        game.transition.type(game, ctx, game.ctx.copy, game.ctx.draw, frac, game.transition.invert_shape);
+        ctx.restore();
     }
 
-    function _draw_transition_dot_mask(game, ctx) {
-        ctx.fillStyle = '#0000ff';
-        let cell_width = game.screen_w / game.transition.w;
-        let cell_height = game.screen_h / game.transition.h;
-        let max_radius = 0.75 * Math.max(cell_width, cell_height);
+    function _draw_slide_down_transition(game, ctx, oldc, newc, frac, reverse) {
+        let offset = frac * game.screen_h;
 
-        let transition_dot_length = game.transition.end_time * 3 / 8;
+        ctx.drawImage(oldc.canvas, 0, -offset);
+        ctx.drawImage(newc.canvas, 0, game.screen_h - offset);
+    }
 
-        for (let x = -1; x < game.transition.w + 1; x++) {
-            for (let y = -1; y < game.transition.h + 1; y++) {
-                let radius;
+    function _draw_slide_up_transition(game, ctx, oldc, newc, frac, reverse) {
+        let offset = frac * game.screen_h;
 
-                let circle_start_time = (x + y) / (game.transition.w + game.transition.h)
-                        * (game.transition.end_time - transition_dot_length);
-                if (game.transition.timer - circle_start_time < 0) {
-                    if (game.transition.invert_shape) {
-                        radius = 0;
-                    } else {
-                        radius = max_radius;
-                    }
-                } else if (game.transition.timer - circle_start_time < transition_dot_length) {
-                    if (game.transition.invert_shape) {
-                        radius = (game.transition.timer - circle_start_time) / transition_dot_length * max_radius;
-                    } else {
-                        radius = (1 - (game.transition.timer - circle_start_time) / transition_dot_length) * max_radius;
-                    }
-                } else {
-                    if (game.transition.invert_shape) {
-                        radius = max_radius;
-                    } else {
-                        radius = 0;
-                    }
-                }
+        ctx.drawImage(oldc.canvas, 0, offset);
+        ctx.drawImage(newc.canvas, 0, - game.screen_h + offset);
+    }
 
-                let draw_x = x;
-                let draw_y = y;
-                if (game.transition.dir_invert_v) draw_x = game.transition.w - 1 - x;
-                if (game.transition.dir_invert_h) draw_y = game.transition.h - 1 - y;
-
-                if (radius >= max_radius * 0.8) {
-                    if (!game.transition.invert_shape) {
-                        ctx.fillRect(draw_x * cell_width, draw_y * cell_width, cell_width + 1, cell_width + 1);
-                    }
-                } else if (radius > 0) {
-                    ctx.save();
-                    ctx.beginPath();
-                    if (game.transition.invert_shape) {
-                        ctx.rect(draw_x * cell_width, draw_y * cell_width, cell_width + 3, cell_width + 3);
-                    }
-                    ctx.moveTo(draw_x * cell_width + cell_width / 2, draw_y * cell_width + cell_width / 2);
-                    ctx.arc(draw_x * cell_width + cell_width / 2,
-                             draw_y * cell_width + cell_width / 2,
-                             radius, 0, 2 * Math.PI, game.transition.invert_shape);
-                    ctx.clip();
-                    ctx.fillRect(draw_x * cell_width, draw_y * cell_width, cell_width, cell_width);
-                    ctx.restore();
-                } else {
-                    if (game.transition.invert_shape) {
-                        ctx.fillRect(draw_x * cell_width, draw_y * cell_width, cell_width + 3, cell_width + 3);
-                    }
-                }
-            }
-        }
+    function _draw_fade_transition(game, ctx, oldc, newc, frac, reverse) {
+        ctx.globalAlpha = 1;
+        ctx.drawImage(oldc.canvas, 0, 0);
+        ctx.globalAlpha = frac;
+        ctx.drawImage(newc.canvas, 0, 0);
     }
 
     /* ---- former contents of ready.js ---- */
@@ -1221,12 +1304,31 @@ let zb = (function() {
 
     return {
         create_game: create_game,
+
         ready: ready,
         mod: mod,
+        sgn: sgn,
+        as_hex: as_hex,
         copy_list: copy_list,
         copy_flat_objlist: copy_flat_objlist,
+        rand_int: rand_int,
+
         sprite_draw: sprite_draw,
         screen_draw: screen_draw,
-        transition: TransitionType,
+
+        buttons: {
+            create: create_buttons,
+            update: update_buttons,
+            click: click_button,
+            draw: button_draw,
+        },
+
+        transition: {
+            type: {
+                fade: _draw_fade_transition,
+                slide_up: _draw_slide_up_transition,
+                slide_down: _draw_slide_down_transition,
+            },
+        },
     }
 })();

@@ -1,6 +1,6 @@
 # zucchinibread.js 🥒🍞
 
-This is a distillation of some of the code I've been using to make games for the last little while. Code for loading/managing audio, loading/displaying images, running a very simple game loop, as well as a quite general and extensible 'screen transition' system. You could charitably call it a "game engine," but that might be giving it a little too much credit. I will probably add support for other stuff I like later (I'd like to add sprite registration points, tilemap drawing, objects that can update themselves, and clickable button UI stuff), but I'm trying to be conservative with what I move into the library in case I need to change behaviors later.
+This is a distillation of some of the code I've been using to make games for the last little while. Code for loading/managing audio, loading/displaying images, running a very simple game loop, as well as a quite general and extensible 'screen transition' system. You could charitably call it a "game engine," but that might be giving it a little too much credit. I will probably add support for other stuff I like later (I'd like to add sprite registration points, tilemap drawing, objects that can update themselves, and <s>clickable button UI stuff</s>), but I'm trying to be conservative with what I move into the library in case I need to change behaviors later.
 
 Sorry about the underscores.
 
@@ -144,7 +144,11 @@ Each of these takes the drawing context as the first argument and the image as t
 
 ### Screen transitions
 
-I need to document these still... I also have a dream of rewriting the interface, so documentation is kind of pending that!
+I need to document these still... I have rewritten the interface finally, though.
+
+### Buttons
+
+We have button functionality now! I will write this up soon.
 
 ### Save load
 
@@ -161,12 +165,16 @@ These functions silently fail if saving does not work due to having cookies disa
 ### random extra utility functions
 
 * `zb.mod(number, modulo)`: This takes the number `number` and gives you the result of `number` modulo `modulo`. It works the same as the normal Javascript `%` operator, except that the output is always guaranteed to be within the range [0, `modulo`), which isn't true of regular `%` when the first value is negative. Since the default `%` behavior is basically something I've never wanted ever, this is a convenience function that does the correct thing instead.
+* `zb.sgn(x)`: Returns -1 if `x` &lt; 0, 0 if `x` = 0, and 1 if `x` &gt; 0.
 * `zb.copy_list(list)`: Copies a list shallowly and returns a new copy of it.
 * `zb.copy_flat_objlist(list)`: Copies a list of objects one level deep, i.e. it will copy each object in the list using `{ ...object }`, but it is not a full deep copy. Still, this type of function comes in handy especially when writing 'undo' logic.
+* `zb.rand_int(x)`: Returns a random integer from 0 to `x` (not including `x`).
+* `zb.rand_int(x, y)`: Returns a random integer from `x` to `y` (including `x`, but not including `y`).
+* `zb.as_hex(n, length)`: Returns a string representing the number `n` in hexadecimal. If `length` is provided, it will add zeroes to the beginning of the string until it is `length` characters long. This can be useful when generating color values (like `#ac59d0`) in code from R/G/B values.
 
 ### mapcompile.py
 
-`levels/mapcompile.py` is a Python script. It compiles levels created with [Tiled](https://mapeditor.org) into a very particular and stupid format. Sometimes I make changes to this script when the levels have objects or whatever in them as well, and it adds that data in too. Requires the [ulvl](https://ulvl.github.io/) library, and should be run like so:
+`levels/mapcompile.py` is a Python script. It compiles levels created with [Tiled](https://mapeditor.org) into a very particular and weird format. Sometimes I make changes to this script when the levels have objects or whatever in them as well, so that it adds that data in too. Requires the [ulvl](https://ulvl.github.io/) library, and should be run like so:
 
 ```
 levels/mapcompile.py levels/*.tmx > levels.js
