@@ -47,6 +47,15 @@ let zb = (function() {
     }
 
     function rand_int(a, b) {
+        let min = 0;
+        let max = 0;
+        if (b === undefined) {
+            max = a;
+        } else {
+            min = a;
+            max = b;
+        }
+        return Math.floor(Math.random() * (max - min) + min);
     }
 
     /* ---- Resource loading / loading screen ---- */
