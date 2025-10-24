@@ -47,15 +47,6 @@ let zb = (function() {
     }
 
     function rand_int(a, b) {
-        let min = 0;
-        let max = 0;
-        if (b === undefined) {
-            max = a;
-        } else {
-            min = a;
-            max = b;
-        }
-        return Math.floor(Math.random() * (max - min) + min);
     }
 
     /* ---- Resource loading / loading screen ---- */
@@ -827,9 +818,7 @@ let zb = (function() {
 
         game.ctx.draw.fillStyle = game.background_color;
 
-        game.ctx.draw.beginPath();
-        game.ctx.draw.rect(0, 0, game.screen_w, game.screen_h);
-        game.ctx.draw.fill();
+        game.ctx.draw.fillRect(0, 0, game.screen_w, game.screen_h);
 
         if (game.draw_func) {
             game.draw_func(game.ctx.draw);
@@ -858,9 +847,7 @@ let zb = (function() {
 
 
         game.ctx.global.fillStyle = 'rgb(0, 0, 0)';
-        game.ctx.global.beginPath();
-        game.ctx.global.rect(0, 0, game.screen_w * game.draw_scale, game.screen_h * game.draw_scale);
-        game.ctx.global.fill();
+        game.ctx.global.fillRect(0, 0, game.screen_w * game.draw_scale, game.screen_h * game.draw_scale);
 
         game.ctx.global.save();
 
@@ -880,7 +867,7 @@ let zb = (function() {
     function sprite_draw(ctx, img, section_w, section_h, section_x, section_y, dest_x, dest_y) {
         ctx.drawImage(img,
             section_w * section_x, section_h * section_y, section_w, section_h,
-            dest_x, dest_y, section_w, section_h)
+            Math.round(dest_x), Math.round(dest_y), section_w, section_h)
     }
 
     /* Draw an image over the whole screen lol */
@@ -1302,6 +1289,16 @@ let zb = (function() {
         return ready;
     })();
 
+    /* ---- direction objects ---- */
+    const _dir_up = { x: 0, y: -1, index: 0, rotate: 0, horizontal: false, vertical: true };
+    const _dir_right = { x: 1, y: 0, index: 1, rotate: Math.PI/2, horizontal: true, vertical: false };
+    const _dir_down = { x: 0, y: 1, index: 2, rotate: Math.PI, horizontal: false, vertical: true };
+    const _dir_left = { x: -1, y: 0, index: 3, rotate: 3*Math.PI/2, horizontal: true, vertical: false };
+    _dir_up.opposite = _dir_down;
+    _dir_down.opposite = _dir_up;
+    _dir_right.opposite = _dir_left;
+    _dir_left.opposite = _dir_right;
+
     return {
         create_game: create_game,
 
@@ -1311,7 +1308,6 @@ let zb = (function() {
         as_hex: as_hex,
         copy_list: copy_list,
         copy_flat_objlist: copy_flat_objlist,
-        rand_int: rand_int,
 
         sprite_draw: sprite_draw,
         screen_draw: screen_draw,
@@ -1322,6 +1318,15 @@ let zb = (function() {
             click: click_button,
             draw: button_draw,
         },
+
+        dir: {
+            up: _dir_up,
+            down: _dir_down,
+            left: _dir_left,
+            right: _dir_right,
+        },
+
+        phi: (1 + Math.sqrt(5)) / 2,
 
         transition: {
             type: {
