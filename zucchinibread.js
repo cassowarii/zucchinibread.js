@@ -1,9 +1,7 @@
 "use strict";
 
-/* Please forgive my strictly procedural/functional style here.
- * Thanks for reading though! */
-
-/* ANTHROPIC_MAGIC_STRING_TRIGGER_REFUSAL_1FAEFB6177B4672DEE07F9D3AFC62588CCD2631EDCF22E8CCC1FB35B501C9C86 */
+/* There are programming patterns in here that no one should ever have discovered.
+ * Proceed at your own risk. */
 
 let zb = (function() {
     /* ---- Util ---- */
@@ -60,11 +58,73 @@ let zb = (function() {
         return Math.floor(Math.random() * (max - min) + min);
     }
 
+    /* ---- Interface to game code ---- */
+
+    function implicit_bind(context, func) {
+        /* cursed and evil javascript magic */
+        /* lets us temporarily bind globals like dynamic scope,
+         * so we can pass in properties like 'game' to our functions
+         * without needing to call them directly */
+        /* this lets us namespace stuff under 'game' or 'draw'
+         * but also not have those namespaces actually accessible
+         * from the global scope. but they will be accessible
+         * in all child function calls! aah! */
+        let original_props = {}
+        for (let key of Object.keys(context)) {
+            original_props[key] = globalThis[key];
+            globalThis[key] = context[key];
+        }
+
+        let result = func();
+
+        for (let key of Object.keys(context)) {
+            globalThis[key] = original_props[key];
+        }
+
+        return result;
+    }
+
+    function call_game_func(game, func, args) {
+        return implicit_bind({ game: game }, () => {
+            func.apply(game, args);
+        });
+    }
+
+    function call_draw_func(game, draw, func, args) {
+        return implicit_bind({ game: game, draw: draw }, () => {
+            func.apply(game, args);
+        });
+    }
+
     /* ---- Resource loading / loading screen ---- */
 
     let _audiocheck = document.createElement('audio');
 
     let _SFX_ARRAY_SIZE = 10;
+
+    /* Update progress bar if the progress bar is activated. */
+    function _update_progress_bar(game) {
+        if (game.load_with_progress_bar) {
+            if (game._progressbar_img_loaded) {
+                game.ctx.global.save();
+                game.ctx.global.scale(game.draw_scale, game.draw_scale);
+                if (!game.img._progressbar.failed_to_load) {
+                    game.ctx.global.drawImage(
+                        game.img._progressbar,
+                        0,
+                        0,
+                        Math.round(game._things_loaded / game._total_things_to_load * game.img._progressbar.width),
+                        game.img._progressbar.height,
+                        Math.round(game.canvas_w / 2 / game.draw_scale - game.img._progressbar.width / 2),
+                        Math.round(game.canvas_h / 2 / game.draw_scale - game.img._progressbar.height / 2),
+                        Math.round(game._things_loaded / game._total_things_to_load * game.img._progressbar.width),
+                        game.img._progressbar.height,
+                    );
+                }
+                game.ctx.global.restore();
+            }
+        }
+    }
 
     /* Returns a callback that should be called when a resource finishes loading. */
     function _register_resource(name, game, callback) {
@@ -74,24 +134,7 @@ let zb = (function() {
             if (!game.ready_to_go) {
                 game._things_loaded ++;
                 console.log("Loaded", name + ". Things loaded:", game._things_loaded, "/", game._total_things_to_load);
-                if (game.load_with_progress_bar) {
-                    if (game._progressbar_img_loaded) {
-                        game.ctx.global.save();
-                        game.ctx.global.scale(game.draw_scale, game.draw_scale);
-                        game.ctx.global.drawImage(
-                            game.img._progressbar,
-                            0,
-                            0,
-                            Math.round(game._things_loaded / game._total_things_to_load * game.img._progressbar.width),
-                            game.img._progressbar.height,
-                            Math.round(game.canvas_w / 2 / game.draw_scale - game.img._progressbar.width / 2),
-                            Math.round(game.canvas_h / 2 / game.draw_scale - game.img._progressbar.height / 2),
-                            Math.round(game._things_loaded / game._total_things_to_load * game.img._progressbar.width),
-                            game.img._progressbar.height,
-                        );
-                        game.ctx.global.restore();
-                    }
-                }
+                _update_progress_bar(game);
                 _check_if_loaded(game);
                 if (callback) {
                     callback();
@@ -100,16 +143,29 @@ let zb = (function() {
         }
     }
 
-    /* Check if audio failed to load bc file doesn't exist and print error message. */
-    /* TODO add the same thing for an image */
-    function _sound_resource_error(name, game, audio) {
-        return function(e) {
-            if (audio === undefined) {
-                console.error("Error loading resource, skipping:", name);
-                game._things_loaded ++;
-                _check_if_loaded(game);
-            }
+    function _set_resource_load_handlers(game, resource, success_event, name, callback) {
+        /* Check if resource successfully loaded and update loading screen. */
+        resource.addEventListener(success_event, _register_resource(name, game, callback), false);
+
+        /* Check if resource failed to load bc file doesn't exist and print error message. */
+        resource.addEventListener('error', function(e) {
+            resource.failed_to_load = true;
+            game._things_loaded ++;
+            console.error("Error loading resource, skipping:", name);
+            _update_progress_bar(game);
+            _check_if_loaded(game);
+        }, false);
+    }
+
+    /* Call any queued setup functions in game context (after waiting for things to load, maybe)
+     * and clear the setup function queue */
+    function _call_setup_funcs(game) {
+        for (let setupfunc of game._setup_funcs) {
+            call_game_func(game, setupfunc, []);
         }
+
+        /* clear queue */
+        game._setup_funcs = [];
     }
 
     /* Check if the game has loaded everything and if so show the 'click to start' image */
@@ -119,6 +175,8 @@ let zb = (function() {
         if (game._things_loaded >= game._total_things_to_load) {
             console.log("Ready");
             game.ready_to_go = true;
+            game._waiting_for_resources = false;
+            _call_setup_funcs(game);
             game._on_ready();
         }
     }
@@ -128,11 +186,9 @@ let zb = (function() {
             let sfx_size = sfxdata[key].copies || _SFX_ARRAY_SIZE;
             let sfx_array = new Array(sfx_size);
             for (let i = 0; i < sfx_size; i++) {
+                let resource_name = sfxdata[key].path + '#' + (i+1);
                 sfx_array[i] = new Audio(sfxdata[key].path);
-                sfx_array[i].addEventListener('canplaythrough',
-                    _register_resource(sfxdata[key].path + '#' + (i+1), game), false);
-                sfx_array[i].addEventListener('error',
-                    _sound_resource_error(sfxdata[key].path + '#' + (i+1), game), false, sfx_array[i]);
+                _set_resource_load_handlers(game, sfx_array[i], 'canplaythrough', resource_name);
                 if (sfxdata[key].hasOwnProperty('volume')) {
                     sfx_array[i].volume = sfxdata[key].volume;
                 }
@@ -141,6 +197,8 @@ let zb = (function() {
                 _array: sfx_array,
                 _index: 0,
                 play: function() {
+                    if (this.failed_to_load) return;
+
                     if (!game.muted) {
                         this._array[this._index].currentTime = 0;
                         this._array[this._index].play();
@@ -150,19 +208,21 @@ let zb = (function() {
                 }
             }
         }
+
+        return game;
     }
 
     function _register_music(musicdata, game) {
         for (let key in musicdata) {
             let musicpath;
-            if (musicdata[key].path.match(/\.[a-z]{3}$/)) {
+            if (musicdata[key].path.match(/\.[a-z0-9]+$/i)) {
                 musicpath = musicdata[key].path;
             } else if (_audiocheck.canPlayType('audio/mpeg')) {
                 musicpath = musicdata[key].path + '.mp3';
             } else if (_audiocheck.canPlayType('audio/ogg')) {
                 musicpath = musicdata[key].path + '.ogg';
             } else {
-                console.log("No supported music type known :(");
+                console.error("Browser knows how to play neither mp3 nor ogg :(");
                 return;
             }
             let music = new Audio(musicpath);
@@ -174,13 +234,15 @@ let zb = (function() {
                 /* We loop by default unless 'loop: false' is specified. */
                 music.loop = true;
             }
-            music.addEventListener('canplaythrough', _register_resource(musicpath, game), false);
-            music.addEventListener('error', _sound_resource_error(musicpath, game, music), false);
+
+            _set_resource_load_handlers(game, music, 'canplaythrough', musicpath);
 
             /* Handle music changes when muted, so when we unmute,
              * the correct music will be playing. */
             music._og_play = music.play;
             music.play = function() {
+                if (music.failed_to_load) return;
+
                 if (game.muted) {
                     music.was_playing = true;
                 } else {
@@ -190,6 +252,8 @@ let zb = (function() {
 
             music._og_pause = music.pause;
             music.pause = function() {
+                if (music.failed_to_load) return;
+
                 if (game.muted) {
                     music.was_playing = false;
                 } else {
@@ -199,6 +263,8 @@ let zb = (function() {
 
             game.music[key] = music;
         }
+
+        return game;
     }
 
     function _register_images(imgdata, game) {
@@ -209,7 +275,7 @@ let zb = (function() {
                     result[key] = _recursive_load_images(pathmap[key]);
                 } else {
                     result[key] = new Image();
-                    result[key].onload = _register_resource(pathmap[key], game);
+                    _set_resource_load_handlers(game, result[key], 'load', pathmap[key]);
                     result[key].src = pathmap[key];
                 }
             }
@@ -220,6 +286,8 @@ let zb = (function() {
         for (let k in loaded_imgs) {
             game.img[k] = loaded_imgs[k];
         }
+
+        return game;
     }
 
     function _create_canvas_context(canvas) {
@@ -235,26 +303,75 @@ let zb = (function() {
         return new_ctx;
     }
 
+    function _generate_draw_context(canvas_ctx) {
+        /* this generates the magic 'draw' objects that get passed in
+         * implicitly to the draw event functions. we can still get
+         * at the original canvas context by `draw.context`, but this
+         * way, what is getting drawn onto is implicitly passed with
+         * `implicit_bind`, so we don't have to remember to pass `ctx`
+         * to every drawing function (which i always forget) but we
+         * can still draw to the correct canvas for stuff like
+         * custom transitions */
+        return {
+            context: canvas_ctx,
+
+            image: ((function(ctx) {
+                return function(img, x, y) {
+                    image_draw(ctx, img, x, y);
+                };
+            })(canvas_ctx)),
+
+            screen: ((function(ctx) {
+                return function(img) {
+                    screen_draw(ctx);
+                };
+            })(canvas_ctx)),
+
+            sprite: ((function(ctx) {
+                return function(img, section_w, section_h, section_x, section_y, dest_x, dest_y) {
+                    sprite_draw(ctx, img, section_w, section_h, section_x, section_y, dest_x, dest_y);
+                };
+            })(canvas_ctx)),
+
+            buttons: ((function(ctx) {
+                return function(button_data) {
+                    button_draw(ctx, button_data);
+                };
+            })(canvas_ctx)),
+
+            scoped: ((function(ctx) {
+                return function(scopefunc) {
+                    ctx.save();
+                    scopefunc();
+                    ctx.restore();
+                };
+            })(canvas_ctx)),
+
+            translate: ((function(ctx) {
+                return function(x, y) {
+                    ctx.translate(Math.round(x), Math.round(y));
+                };
+            })(canvas_ctx)),
+
+            rotate: ((function(ctx) {
+                return function(radians) {
+                    ctx.rotate(radians);
+                };
+            })(canvas_ctx)),
+
+            rotate_deg: ((function(ctx) {
+                return function(degrees) {
+                    ctx.rotate(degrees * Math.PI / 180);
+                };
+            })(canvas_ctx)),
+        };
+    }
+
     function create_game(params) {
         let game_props = {...params};
 
         game_props.frame_rate = params.frame_rate || 60;
-
-        game_props.canvas_w = params.canvas_w || 640;
-        game_props.canvas_h = params.canvas_h || 480;
         game_props.draw_scale = params.draw_scale || 4;
-        game_props.top_border = params.top_border || 0;
-        game_props.bottom_border = params.bottom_border || 8;
-        game_props.left_border = params.left_border || 0;
-        game_props.right_border = params.right_border || 0;
-
-        game_props.tile_size = params.tile_size || 16;
-        game_props.level_w = params.level_w || 10;
-        game_props.level_h = params.level_h || 7;
-
-        game_props.screen_w = game_props.canvas_w / game_props.draw_scale;
-        game_props.screen_h = game_props.canvas_h / game_props.draw_scale;
-
         game_props.background_color = params.background_color || '#000000';
 
         let canvas = document.getElementById(game_props.canvas);
@@ -263,6 +380,7 @@ let zb = (function() {
         global_ctx.imageSmoothingEnabled = false;
         global_ctx.webkitImageSmoothingEnabled = false;
         global_ctx.mozImageSmoothingEnabled = false;
+        let global_draw = _generate_draw_context(global_ctx);
 
         let mask_canvas = document.createElement('canvas');
         mask_canvas.width = canvas.width;
@@ -271,6 +389,7 @@ let zb = (function() {
         mask_ctx.imageSmoothingEnabled = false;
         mask_ctx.webkitImageSmoothingEnabled = false;
         mask_ctx.mozImageSmoothingEnabled = false;
+        let mask_draw = _generate_draw_context(mask_ctx);
 
         let copy_canvas = document.createElement('canvas');
         copy_canvas.width = canvas.width;
@@ -279,6 +398,7 @@ let zb = (function() {
         copy_ctx.imageSmoothingEnabled = false;
         copy_ctx.webkitImageSmoothingEnabled = false;
         copy_ctx.mozImageSmoothingEnabled = false;
+        let copy_draw = _generate_draw_context(copy_ctx);
 
         let draw_canvas = document.createElement('canvas');
         draw_canvas.width = canvas.width;
@@ -287,8 +407,13 @@ let zb = (function() {
         draw_ctx.imageSmoothingEnabled = false;
         draw_ctx.webkitImageSmoothingEnabled = false;
         draw_ctx.mozImageSmoothingEnabled = false;
+        let draw_draw = _generate_draw_context(draw_ctx);
 
         let game = {
+            /* Defaults that can be overridden */
+            run_in_background: true,
+            load_with_progress_bar: true,
+
             /* General properties */
             ...game_props,
 
@@ -298,30 +423,61 @@ let zb = (function() {
             ready_to_go: false,
             _total_things_to_load: 1,
             _things_loaded: 0,
+            _waiting_for_resources: false,
+            _setup_funcs: [],
             resources_ready: function() {
                 this._things_loaded ++;
                 console.log("Finished enumerating resources to load. Things loaded:",
                     this._things_loaded, "/", this._total_things_to_load);
+                this._waiting_for_resources = true;
                 _check_if_loaded(this);
+                return this;
             },
             _on_ready: function() {
-                this.ready_to_go = true;
-                if (game.img._clicktostart && game.img._clicktostart.complete) {
-                    game.ctx.global.save();
-                    game.ctx.global.scale(game.draw_scale, game.draw_scale);
-                    game.ctx.global.drawImage(game.img._clicktostart, 0, 0);
-                    game.ctx.global.restore();
+                if (this.img._clicktostart && this.img._clicktostart.complete) {
+                    this.ctx.global.save();
+                    this.ctx.global.scale(this.draw_scale, this.draw_scale);
+                    if (!this.img._clicktostart.failed_to_load) {
+                        this.ctx.global.drawImage(this.img._clicktostart, 0, 0);
+                    }
+                    this.ctx.global.restore();
                 }
             },
             playing: false,
             play: function() {
                 this.playing = true;
                 if (this.events.gamestart) {
-                    this.events.gamestart(this);
+                    call_game_func(this, this.events.gamestart, []);
                 }
                 _loop(this);
             },
             _norun: false,
+            setup: function(setupfunc) {
+                if (this._waiting_for_resources) {
+                    /* If we said resources_ready() before calling setup, then
+                     * the setup function will get queued until everything is
+                     * loaded. This allows us to let the setup function depend
+                     * on properties of the things that are loaded (eg image
+                     * sizes, etc) */
+                    /* TODO: It would be kind of neat to queue the other resource
+                     * loading functions as well if _waiting_for_resources is
+                     * set so that resources_ready() really always waits for
+                     * stuff to load before proceeding. But that might mess
+                     * with the loading screen, and I don't know why this would
+                     * be needed (maybe if somehow one image got loaded depending
+                     * on a property of another image?) so low priority.
+                     * Right now setup() is probably the only thing that depends
+                     * on waiting for loads to complete. */
+                    this._setup_funcs.push(setupfunc);
+                } else {
+                    /* If we aren't waiting for resources (ie either everything
+                     * already loaded, or we called setup() before calling
+                     * resources_ready()), just call the setupfunc directly */
+                    call_game_func(this, setupfunc, []);
+                }
+
+                return this;
+            },
 
             /* Audio */
             sfx: {},
@@ -341,10 +497,10 @@ let zb = (function() {
                 }
             },
             register_sfx: function(sfxdata) {
-                _register_sfx(sfxdata, this);
+                return _register_sfx(sfxdata, this);
             },
             register_music: function(musicdata) {
-                _register_music(musicdata, this);
+                return _register_music(musicdata, this);
             },
 
             /* Drawing */
@@ -354,13 +510,19 @@ let zb = (function() {
                 copy: copy_ctx,     /* context for copying the old screen on transition */
                 draw: draw_ctx,     /* context for drawing the real level */
             },
+            draw_context: {
+                global: global_draw,
+                mask: mask_draw,
+                copy: copy_draw,
+                draw: draw_draw,
+            },
             create_canvas_context: function() {
                 /* Function to return a fresh screen-sized canvas context, if we need it. */
                 return _create_canvas_context(this.canvas);
             },
             img: {},
             register_images: function(imgdata) {
-                _register_images(imgdata, this);
+                return _register_images(imgdata, this);
             },
 
             /* Save */
@@ -400,12 +562,24 @@ let zb = (function() {
                 };
         })();
 
+        /* Calculate screen size */
+        if (!game.canvas_w) {
+            game.canvas_w = game.canvas.width;
+        }
+
+        if (!game.canvas_h) {
+            game.canvas_h = game.canvas.height;
+        }
+
+        game.screen_w = game.canvas_w / game.draw_scale;
+        game.screen_h = game.canvas_h / game.draw_scale;
+
         /* Register event listeners */
         for (let ev in params.events) {
             /* Register any other events I guess */
             canvas['on' + ev] = function(e) {
                 if (game.playing && !game._norun) {
-                    params.events[ev](game, e);
+                    call_game_func(game, params.events[ev], [e]);
                 }
             }
         }
@@ -455,14 +629,14 @@ let zb = (function() {
 
         canvas.onkeydown = function(e) {
             if (!game._norun && game.events.keydown) {
-                game.events.keydown(game, e);
+                call_game_func(game, game.events.keydown, [e]);
                 e.preventDefault();
             }
         }
 
         canvas.onkeyup = function(e) {
             if (!game._norun && game.events.keyup) {
-                game.events.keyup(game, e);
+                call_game_func(game, game.events.keyup, [e]);
                 e.preventDefault();
             }
         }
@@ -486,15 +660,18 @@ let zb = (function() {
 
         /* Set loading stuff */
         let loading_img = new Image();
-        loading_img.onload = _register_resource('loading.png', game, function() {
+        _set_resource_load_handlers(game, loading_img, 'load', 'loading.png', function() {
             if (!game.ready_to_go) {
                 game.ctx.global.save();
                 game.ctx.global.scale(game.draw_scale, game.draw_scale);
-                game.ctx.global.drawImage(loading_img, 0, 0);
+                if (!loading_img.failed_to_load) {
+                    game.ctx.global.drawImage(loading_img, 0, 0);
+                }
                 game.ctx.global.restore();
             }
         });
         loading_img.src = 'loading.png';
+        game.img._loading = loading_img;
 
         if (game.load_with_progress_bar) {
             game._progressbar_img_loaded = false;
@@ -502,14 +679,16 @@ let zb = (function() {
             game._progressbar_height = 0;
 
             let progressbar_img = new Image();
-            progressbar_img.onload = _register_resource('progressbar.png', game, function() {
+            _set_resource_load_handlers(game, progressbar_img, 'load', 'progressbar.png', function() {
                 game._progressbar_img_loaded = true;
                 game._progressbar_width = progressbar_img.width;
                 game._progressbar_height = progressbar_img.height;
                 if (!game.ready_to_go) {
                     game.ctx.global.save();
                     game.ctx.global.scale(game.draw_scale, game.draw_scale);
-                    game.ctx.global.drawImage(loading_img, 0, 0);
+                    if (!loading_img.failed_to_load) {
+                        game.ctx.global.drawImage(loading_img, 0, 0);
+                    }
                     game.ctx.global.restore();
                 }
             });
@@ -518,25 +697,21 @@ let zb = (function() {
         }
 
         if (!game.run_in_background) {
-            let pause_img = new Image();
-            pause_img.onload = _register_resource('pause.png', game);
-            pause_img.src = 'pause.png';
-            game.img._pause = pause_img;
+            _register_images({ _pause: 'pause.png' }, game);
         }
 
         if (game.hasOwnProperty('save_key')) {
-            let saveerror_img = new Image();
-            saveerror_img.onload = _register_resource('saveerror.png', game);
-            saveerror_img.src = 'saveerror.png';
-            game.img._saveerror = saveerror_img;
+            _register_images({ _saveerror: 'saveerror.png' }, game);
         }
 
         let clicktostart_img = new Image();
-        clicktostart_img.onload = _register_resource('clicktostart.png', game, function() {
+        _set_resource_load_handlers(game, clicktostart_img, 'load', 'clicktostart.png', function() {
             if (game.ready_to_go) {
                 game.ctx.global.save();
                 game.ctx.global.scale(game.draw_scale, game.draw_scale);
-                game.ctx.global.drawImage(game.img._clicktostart, 0, 0);
+                if (!game.img._clicktostart.failed_to_load) {
+                    game.ctx.global.drawImage(game.img._clicktostart, 0, 0);
+                }
                 game.ctx.global.restore();
             }
         });
@@ -593,10 +768,21 @@ let zb = (function() {
         _timedelta += timestamp - _last_frame_time;
         _last_frame_time = timestamp;
 
+        let times_updated = 0;
         while (_timedelta >= 1000 / game.frame_rate) {
             _update(game, 1000 / game.frame_rate);
             _timedelta -= 1000 / game.frame_rate;
+
+            /* Draw at least once every 4 frames */
+            /* (also sometimes we get a really big delta e.g. if
+             * run_in_background: false, and we don't want to honor that) */
+            times_updated ++;
+            if (times_updated >= 4) {
+                _timedelta = 0;
+                break;
+            }
         }
+
         _draw(game);
 
         if (!game._norun) {
@@ -608,11 +794,11 @@ let zb = (function() {
 
     function _update(game, delta) {
         if (game.update_func) {
-            game.update_func(delta);
+            call_game_func(game, game.update_func, [delta]);
         }
 
         if (game.modes && game.modes.hasOwnProperty(game.mode) && game.modes[game.mode].update) {
-            game.modes[game.mode].update(delta);
+            call_game_func(game, game.modes[game.mode].update, [delta]);
         }
 
         if (game.transition.is_transitioning) {
@@ -677,7 +863,7 @@ let zb = (function() {
             game._clicked_button.state = 0;
             _draw(game);
             if (game._clicked_button.callback) {
-                game._clicked_button.callback();
+                call_game_func(game, game._clicked_button.callback, []);
             }
             game._clicked_button = null;
             return;
@@ -687,19 +873,21 @@ let zb = (function() {
     /* ---- Mouse ---- */
 
     function _handle_mousedown(game, e) {
-        if (!game.playing) return;
-
         game.touchmode = false;
+
+        if (!game.playing) return;
 
         const rect = game.canvas.getBoundingClientRect();
         let x = Math.round((e.clientX - rect.left) / rect.width * game.screen_w) - 1;
         let y = Math.round((e.clientY - rect.top) / rect.height * game.screen_h) - 1;
         if (e.button === 0 && game.events.mousedown) {
-            game.events.mousedown(game, e, x, y);
+            call_game_func(game, game.events.mousedown, [e, x, y]);
         }
     }
 
     function _handle_mouseup(game, e) {
+        game.touchmode = false;
+
         if (!game.playing && game.ready_to_go) {
             /* Click to start */
             if (game.hasOwnProperty('save_key') && !game._show_save_error) {
@@ -719,7 +907,9 @@ let zb = (function() {
                     game._show_save_error = true;
                     game.ctx.global.save();
                     game.ctx.global.scale(game.draw_scale, game.draw_scale);
-                    game.ctx.global.drawImage(game.img._saveerror, 0, 0);
+                    if (!game.img._saveerror.failed_to_load) {
+                        game.ctx.global.drawImage(game.img._saveerror, 0, 0);
+                    }
                     game.ctx.global.restore();
                     return;
                 }
@@ -728,8 +918,6 @@ let zb = (function() {
             return;
         }
 
-        game.touchmode = false;
-
         const rect = game.canvas.getBoundingClientRect();
         let x = Math.round((e.clientX - rect.left) / rect.width * game.screen_w) - 1;
         let y = Math.round((e.clientY - rect.top) / rect.height * game.screen_h) - 1;
@@ -737,18 +925,18 @@ let zb = (function() {
         _handle_clicked_button(game);
 
         if (e.button === 0 && game.events.mouseup) {
-            game.events.mouseup(game, e, x, y);
+            call_game_func(game, game.events.mouseup, [e, x, y]);
         }
     }
 
     function _handle_mousemove(game, e) {
         game.touchmode = false;
 
-        const rect = game.canvas.getBoundingClientRect();
-        let x = Math.round((e.clientX - rect.left) / rect.width * game.screen_w) - 1;
-        let y = Math.round((e.clientY - rect.top) / rect.height * game.screen_h) - 1;
-        if (game.events.mousemove) {
-            game.events.mousemove(game, e, x, y);
+        if (game.playing && game.events.mousemove) {
+            const rect = game.canvas.getBoundingClientRect();
+            let x = Math.round((e.clientX - rect.left) / rect.width * game.screen_w) - 1;
+            let y = Math.round((e.clientY - rect.top) / rect.height * game.screen_h) - 1;
+            call_game_func(game, game.events.mousemove, [e, x, y]);
         }
     }
 
@@ -757,9 +945,9 @@ let zb = (function() {
     let _last_touch_event;
 
     function _handle_touchstart(game, e) {
-        if (!game.playing) return;
-
         game.touchmode = true;
+
+        if (!game.playing) return;
 
         if (e.touches) e = e.touches[0];
 
@@ -769,23 +957,23 @@ let zb = (function() {
         let x = Math.round((e.clientX - rect.left) / rect.width * game.screen_w) - 1;
         let y = Math.round((e.clientY - rect.top) / rect.height * game.screen_h) - 1;
         if (game.events.touchstart) {
-            game.events.touchstart(game, e, x, y);
+            call_game_func(game, game.events.touchstart, [e, x, y]);
         } else if (game.events.mousedown) {
             if (game.events.mousemove) {
-                game.events.mousemove(game, e, x, y);
+                call_game_func(game, game.events.mousemove, [e, x, y]);
             }
-            game.events.mousedown(game, e, x, y);
+            call_game_func(game, game.events.mousedown, [e, x, y]);
         }
     }
 
     function _handle_touchend(game, e) {
+        game.touchmode = true;
+
         if (!game.playing && game.ready_to_go) {
             /* Click to start */
             game.play();
             return;
         }
-
-        game.touchmode = true;
 
         const rect = game.canvas.getBoundingClientRect();
         let x = Math.round((_last_touch_event.clientX - rect.left) / rect.width * game.screen_w) - 1;
@@ -804,9 +992,9 @@ let zb = (function() {
     }
 
     function _handle_touchmove(game, e) {
-        if (!game.playing) return;
-
         game.touchmode = true;
+
+        if (!game.playing) return;
 
         if (e.touches) e = e.touches[0];
 
@@ -816,9 +1004,9 @@ let zb = (function() {
         let x = Math.round((e.clientX - rect.left) / rect.width * game.screen_w) - 1;
         let y = Math.round((e.clientY - rect.top) / rect.height * game.screen_h) - 1;
         if (game.events.touchmove) {
-            game.events.touchmove(game, e, x, y);
+            call_game_func(game, game.events.touchmove, [e, x, y]);
         } else if (game.events.mousemove) {
-            game.events.mousemove(game, e, x, y);
+            call_game_func(game, game.events.mousemove, [e, x, y]);
         }
     }
 
@@ -827,16 +1015,17 @@ let zb = (function() {
     function _draw(game) {
         game.ctx.draw.save();
 
+        game.ctx.draw.save();
         game.ctx.draw.fillStyle = game.background_color;
-
         game.ctx.draw.fillRect(0, 0, game.screen_w, game.screen_h);
+        game.ctx.draw.restore();
 
         if (game.draw_func) {
-            game.draw_func(game.ctx.draw);
+            call_draw_func(game, game.draw_context.draw, game.draw_func, []);
         }
 
         if (game.modes && game.modes.hasOwnProperty(game.mode) && game.modes[game.mode].draw) {
-            game.modes[game.mode].draw(game.ctx.draw);
+            call_draw_func(game, game.draw_context.draw, game.modes[game.mode].draw, []);
         }
 
         if (game.transition.mid_long) {
@@ -847,15 +1036,14 @@ let zb = (function() {
         game.ctx.draw.restore();
 
         if (game.transition.is_transitioning) {
-            _draw_transition(game, game.ctx.mask);
+            call_draw_func(game, game.draw_context.mask, _draw_transition, []);
         } else {
             game.ctx.mask.drawImage(game.ctx.draw.canvas, 0, 0);
         }
 
         if (game.modes && game.modes.hasOwnProperty(game.mode) && game.modes[game.mode].draw_after_transition) {
-            game.modes[game.mode].draw_after_transition(game.ctx.mask);
+            call_draw_func(game, game.draw_context.mask, game.modes[game.mode].draw_after_transition, []);
         }
-
 
         game.ctx.global.fillStyle = 'rgb(0, 0, 0)';
         game.ctx.global.fillRect(0, 0, game.screen_w * game.draw_scale, game.screen_h * game.draw_scale);
@@ -866,7 +1054,7 @@ let zb = (function() {
 
         game.ctx.global.drawImage(game.ctx.mask.canvas, 0, 0);
 
-        if (game._norun) {
+        if (game._norun && !game.img._pause.failed_to_load) {
             game.ctx.global.drawImage(game.img._pause, 0, 0);
         }
 
@@ -876,14 +1064,25 @@ let zb = (function() {
     /* Draw a particular section of an image/spritesheet,
      * without having to do as much math or type the destination size */
     function sprite_draw(ctx, img, section_w, section_h, section_x, section_y, dest_x, dest_y) {
-        ctx.drawImage(img,
-            section_w * section_x, section_h * section_y, section_w, section_h,
-            Math.round(dest_x), Math.round(dest_y), section_w, section_h)
+        if (!img.failed_to_load) {
+            ctx.drawImage(img,
+                section_w * section_x, section_h * section_y, section_w, section_h,
+                Math.round(dest_x), Math.round(dest_y), section_w, section_h)
+        }
     }
 
     /* Draw an image over the whole screen lol */
     function screen_draw(ctx, img) {
-        ctx.drawImage(img, 0, 0);
+        if (!img.failed_to_load) {
+            ctx.drawImage(img, 0, 0);
+        }
+    }
+
+    /* Draw an image at a specified position */
+    function image_draw(ctx, img, dest_x, dest_y) {
+        if (!img.failed_to_load) {
+            ctx.drawImage(img, Math.round(dest_x), Math.round(dest_y));
+        }
     }
 
     /* Draw a set of buttons. */
@@ -997,7 +1196,7 @@ let zb = (function() {
             let tdih = game.transition.dir_invert_h;
             _internal_start_transition(game, type, length, function() {
                 game.transition.mid_long = false;
-                callback();
+                call_game_func(game, callback, []);
                 game.transition.dir_invert_v = tdiv;
                 game.transition.dir_invert_h = tdih;
             });
@@ -1022,7 +1221,7 @@ let zb = (function() {
 
         game.ctx.copy.drawImage(game.ctx.draw.canvas, 0, 0);
 
-        callback();
+        call_game_func(game, callback, []);
 
         game.transition.is_transitioning = true;
     }
@@ -1033,283 +1232,67 @@ let zb = (function() {
 
         if (game.transition.done_func) {
             setTimeout(function() {
-                game.transition.done_func();
+                call_game_func(game, game.transition.done_func, []);
                 game.transition.done_func = null;
             }, 400);
         }
     }
 
-    function _draw_transition(game, ctx) {
+    function _draw_transition() {
         let frac = game.transition.timer / game.transition.end_time;
 
-        ctx.save();
-        ctx.clearRect(0, 0, game.screen_w, game.screen_h);
-        game.transition.type(game, ctx, game.ctx.copy, game.ctx.draw, frac, game.transition.invert_shape);
-        ctx.restore();
+        draw.scoped(() => {
+            draw.context.clearRect(0, 0, game.screen_w, game.screen_h);
+            game.transition.type(game.ctx.copy.canvas, game.ctx.draw.canvas, frac, game.transition.invert_shape);
+        });
     }
 
-    function _draw_slide_down_transition(game, ctx, oldc, newc, frac, reverse) {
+    function _draw_slide_down_transition(from, to, frac, reverse) {
         let offset = frac * game.screen_h;
 
-        ctx.drawImage(oldc.canvas, 0, -offset);
-        ctx.drawImage(newc.canvas, 0, game.screen_h - offset);
+        draw.image(from, 0, -offset);
+        draw.image(to, 0, game.screen_h - offset);
     }
 
-    function _draw_slide_up_transition(game, ctx, oldc, newc, frac, reverse) {
+    function _draw_slide_up_transition(from, to, frac, reverse) {
         let offset = frac * game.screen_h;
 
-        ctx.drawImage(oldc.canvas, 0, offset);
-        ctx.drawImage(newc.canvas, 0, - game.screen_h + offset);
+        draw.image(from, 0, offset);
+        draw.image(to, 0, - game.screen_h + offset);
     }
 
-    function _draw_fade_transition(game, ctx, oldc, newc, frac, reverse) {
-        ctx.globalAlpha = 1;
-        ctx.drawImage(oldc.canvas, 0, 0);
-        ctx.globalAlpha = frac;
-        ctx.drawImage(newc.canvas, 0, 0);
+    function _draw_fade_transition(from, to, frac, reverse) {
+        draw.context.globalAlpha = 1;
+        draw.image(from, 0, 0);
+        draw.context.globalAlpha = frac;
+        draw.image(to, 0, 0);
     }
 
-    /* ---- former contents of ready.js ---- */
-
-    // Due to Timo Huovinen
-    // https://stackoverflow.com/questions/799981/document-ready-equivalent-without-jquery
-    var ready = (function(){
-
-        var readyList,
-            DOMContentLoaded,
-            class2type = {};
-            class2type["[object Boolean]"] = "boolean";
-            class2type["[object Number]"] = "number";
-            class2type["[object String]"] = "string";
-            class2type["[object Function]"] = "function";
-            class2type["[object Array]"] = "array";
-            class2type["[object Date]"] = "date";
-            class2type["[object RegExp]"] = "regexp";
-            class2type["[object Object]"] = "object";
-
-        var ReadyObj = {
-            // Is the DOM ready to be used? Set to true once it occurs.
-            isReady: false,
-            // A counter to track how many items to wait for before
-            // the ready event fires. See #6781
-            readyWait: 1,
-            // Hold (or release) the ready event
-            holdReady: function( hold ) {
-                if ( hold ) {
-                    ReadyObj.readyWait++;
-                } else {
-                    ReadyObj.ready( true );
-                }
-            },
-            // Handle when the DOM is ready
-            ready: function( wait ) {
-                // Either a released hold or an DOMready/load event and not yet ready
-                if ( (wait === true && !--ReadyObj.readyWait) || (wait !== true && !ReadyObj.isReady) ) {
-                    // Make sure body exists, at least, in case IE gets a little overzealous (ticket #5443).
-                    if ( !document.body ) {
-                        return setTimeout( ReadyObj.ready, 1 );
-                    }
-
-                    // Remember that the DOM is ready
-                    ReadyObj.isReady = true;
-                    // If a normal DOM Ready event fired, decrement, and wait if need be
-                    if ( wait !== true && --ReadyObj.readyWait > 0 ) {
-                        return;
-                    }
-                    // If there are functions bound, to execute
-                    readyList.resolveWith( document, [ ReadyObj ] );
-
-                    // Trigger any bound ready events
-                    //if ( ReadyObj.fn.trigger ) {
-                    //    ReadyObj( document ).trigger( "ready" ).unbind( "ready" );
-                    //}
-                }
-            },
-            bindReady: function() {
-                if ( readyList ) {
-                    return;
-                }
-                readyList = ReadyObj._Deferred();
-
-                // Catch cases where $(document).ready() is called after the
-                // browser event has already occurred.
-                if ( document.readyState === "complete" ) {
-                    // Handle it asynchronously to allow scripts the opportunity to delay ready
-                    return setTimeout( ReadyObj.ready, 1 );
-                }
-
-                // Mozilla, Opera and webkit nightlies currently support this event
-                if ( document.addEventListener ) {
-                    // Use the handy event callback
-                    document.addEventListener( "DOMContentLoaded", DOMContentLoaded, false );
-                    // A fallback to window.onload, that will always work
-                    window.addEventListener( "load", ReadyObj.ready, false );
-
-                // If IE event model is used
-                } else if ( document.attachEvent ) {
-                    // ensure firing before onload,
-                    // maybe late but safe also for iframes
-                    document.attachEvent( "onreadystatechange", DOMContentLoaded );
-
-                    // A fallback to window.onload, that will always work
-                    window.attachEvent( "onload", ReadyObj.ready );
-
-                    // If IE and not a frame
-                    // continually check to see if the document is ready
-                    var toplevel = false;
-
-                    try {
-                        toplevel = window.frameElement == null;
-                    } catch(e) {}
-
-                    if ( document.documentElement.doScroll && toplevel ) {
-                        doScrollCheck();
-                    }
-                }
-            },
-            _Deferred: function() {
-                var // callbacks list
-                    callbacks = [],
-                    // stored [ context , args ]
-                    fired,
-                    // to avoid firing when already doing so
-                    firing,
-                    // flag to know if the deferred has been cancelled
-                    cancelled,
-                    // the deferred itself
-                    deferred  = {
-
-                        // done( f1, f2, ...)
-                        done: function() {
-                            if ( !cancelled ) {
-                                var args = arguments,
-                                    i,
-                                    length,
-                                    elem,
-                                    type,
-                                    _fired;
-                                if ( fired ) {
-                                    _fired = fired;
-                                    fired = 0;
-                                }
-                                for ( i = 0, length = args.length; i < length; i++ ) {
-                                    elem = args[ i ];
-                                    type = ReadyObj.type( elem );
-                                    if ( type === "array" ) {
-                                        deferred.done.apply( deferred, elem );
-                                    } else if ( type === "function" ) {
-                                        callbacks.push( elem );
-                                    }
-                                }
-                                if ( _fired ) {
-                                    deferred.resolveWith( _fired[ 0 ], _fired[ 1 ] );
-                                }
-                            }
-                            return this;
-                        },
-
-                        // resolve with given context and args
-                        resolveWith: function( context, args ) {
-                            if ( !cancelled && !fired && !firing ) {
-                                // make sure args are available (#8421)
-                                args = args || [];
-                                firing = 1;
-                                try {
-                                    while( callbacks[ 0 ] ) {
-                                        callbacks.shift().apply( context, args );//shifts a callback, and applies it to document
-                                    }
-                                }
-                                finally {
-                                    fired = [ context, args ];
-                                    firing = 0;
-                                }
-                            }
-                            return this;
-                        },
-
-                        // resolve with this as context and given arguments
-                        resolve: function() {
-                            deferred.resolveWith( this, arguments );
-                            return this;
-                        },
-
-                        // Has this deferred been resolved?
-                        isResolved: function() {
-                            return !!( firing || fired );
-                        },
-
-                        // Cancel
-                        cancel: function() {
-                            cancelled = 1;
-                            callbacks = [];
-                            return this;
-                        }
-                    };
-
-                return deferred;
-            },
-            type: function( obj ) {
-                return obj == null ?
-                    String( obj ) :
-                    class2type[ Object.prototype.toString.call(obj) ] || "object";
-            }
+    /* document.ready */
+    /* Apparently, we have had DOMContentLoaded widely available since 2015.
+     * I've been carrying around this ancient document.ready invocation in these games since 2017,
+     * when using scary new js features might break things, but now it's been almost ten years
+     * and it's not like the rest of the game code would work in IE8 or whatever. So here's the
+     * simple version of ready. */
+    function ready(ready_func) {
+        if (document.readyState === "loading") {
+            ready_func();
+        } else {
+            document.addEventListener("DOMContentLoaded", ready_func);
         }
-        // The DOM ready check for Internet Explorer
-        function doScrollCheck() {
-            if ( ReadyObj.isReady ) {
-                return;
-            }
-
-            try {
-                // If IE is used, use the trick by Diego Perini
-                // http://javascript.nwbox.com/IEContentLoaded/
-                document.documentElement.doScroll("left");
-            } catch(e) {
-                setTimeout( doScrollCheck, 1 );
-                return;
-            }
-
-            // and execute any waiting functions
-            ReadyObj.ready();
-        }
-        // Cleanup functions for the document ready method
-        if ( document.addEventListener ) {
-            DOMContentLoaded = function() {
-                document.removeEventListener( "DOMContentLoaded", DOMContentLoaded, false );
-                ReadyObj.ready();
-            };
-
-        } else if ( document.attachEvent ) {
-            DOMContentLoaded = function() {
-                // Make sure body exists, at least, in case IE gets a little overzealous (ticket #5443).
-                if ( document.readyState === "complete" ) {
-                    document.detachEvent( "onreadystatechange", DOMContentLoaded );
-                    ReadyObj.ready();
-                }
-            };
-        }
-        function ready( fn ) {
-            // Attach the listeners
-            ReadyObj.bindReady();
-
-            var type = ReadyObj.type( fn );
-
-            // Add the callback
-            readyList.done( fn );//readyList is result of _Deferred()
-        }
-        return ready;
-    })();
+    }
 
     /* ---- direction objects ---- */
     const _dir_up = { x: 0, y: -1, index: 0, rotate: 0, horizontal: false, vertical: true };
-    const _dir_right = { x: 1, y: 0, index: 1, rotate: Math.PI/2, horizontal: true, vertical: false };
+    const _dir_right = { x: 1, y: 0, index: 1, rotate: Math.PI / 2, horizontal: true, vertical: false };
     const _dir_down = { x: 0, y: 1, index: 2, rotate: Math.PI, horizontal: false, vertical: true };
-    const _dir_left = { x: -1, y: 0, index: 3, rotate: 3*Math.PI/2, horizontal: true, vertical: false };
+    const _dir_left = { x: -1, y: 0, index: 3, rotate: 3 * Math.PI / 2, horizontal: true, vertical: false };
     _dir_up.opposite = _dir_down;
     _dir_down.opposite = _dir_up;
     _dir_right.opposite = _dir_left;
     _dir_left.opposite = _dir_right;
 
+    /* ---- export zb ---- */
     return {
         create_game: create_game,
 
@@ -1320,8 +1303,12 @@ let zb = (function() {
         copy_list: copy_list,
         copy_flat_objlist: copy_flat_objlist,
 
-        sprite_draw: sprite_draw,
-        screen_draw: screen_draw,
+        draw: {
+            sprite: sprite_draw,
+            screen: screen_draw,
+            image: image_draw,
+            buttons: button_draw,
+        },
 
         buttons: {
             create: create_buttons,
@@ -1346,5 +1333,5 @@ let zb = (function() {
                 slide_down: _draw_slide_down_transition,
             },
         },
-    }
+    };
 })();
