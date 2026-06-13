@@ -160,7 +160,7 @@ the enemy image objects will be accessible at `game.img.enemies.bean`, etc.)
     bgm1: {
         path: 'music/bgm1',
         volume: 0.5,
-    }
+    },
     bgm2: {
         path: 'music/bgm2.wav',
         volume: 0.5,
