@@ -982,12 +982,12 @@ let zb = (function() {
         _handle_clicked_button(game);
 
         if (game.events.touchend) {
-            game.events.touchend(game, e, x, y);
+            call_game_func(game, game.events.touchend, [e, x, y]);
         } else if (game.events.mouseup) {
             if (game.events.mousemove) {
-                game.events.mousemove(game, e, x, y);
+                call_game_func(game, game.events.mousemove, [e, x, y]);
             }
-            game.events.mouseup(game, e, x, y);
+            call_game_func(game, game.events.mouseup, [e, x, y]);
         }
     }
 
