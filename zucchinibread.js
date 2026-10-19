@@ -58,6 +58,10 @@ let zb = (function() {
         return Math.floor(Math.random() * (max - min) + min);
     }
 
+    function defined_or(a, b) {
+        return a === undefined ? b : a;
+    }
+
     /* ---- Interface to game code ---- */
 
     function implicit_bind(context, func) {
@@ -323,7 +327,7 @@ let zb = (function() {
 
             screen: ((function(ctx) {
                 return function(img) {
-                    screen_draw(ctx);
+                    screen_draw(ctx, img);
                 };
             })(canvas_ctx)),
 
@@ -1073,14 +1077,14 @@ let zb = (function() {
 
     /* Draw an image over the whole screen lol */
     function screen_draw(ctx, img) {
-        if (!img.failed_to_load) {
+        if (img && !img.failed_to_load) {
             ctx.drawImage(img, 0, 0);
         }
     }
 
     /* Draw an image at a specified position */
     function image_draw(ctx, img, dest_x, dest_y) {
-        if (!img.failed_to_load) {
+        if (img && !img.failed_to_load) {
             ctx.drawImage(img, Math.round(dest_x), Math.round(dest_y));
         }
     }
@@ -1302,6 +1306,7 @@ let zb = (function() {
         as_hex: as_hex,
         copy_list: copy_list,
         copy_flat_objlist: copy_flat_objlist,
+        defined_or: defined_or,
 
         draw: {
             sprite: sprite_draw,
